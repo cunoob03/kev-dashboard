@@ -1,2 +1,2 @@
 # kev-dashboard
-Group project for Introduction to Programming (VGU)
+Group project for Intro to Programming (VGU)
