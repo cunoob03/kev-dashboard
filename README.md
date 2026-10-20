@@ -1,4 +1,4 @@
-# KEV Dashboard / Prioritization
+# KEV Prioritization Dashboard
 
 Group project for Intro to Programming (VGU). Analyze the checked-in CISA
 Known Exploited Vulnerabilities catalog and generate a text dashboard,
