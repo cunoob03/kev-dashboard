@@ -1,4 +1,4 @@
-# Catalog version: 2026.10.16; Reference date: 2026-10-18
+# Catalog version: 2026.10.16; Download date: 2026-10-18; Reference date: 2026-10-18; Due soon: 0-14 days
 cve_id,vendor,product,date_added,due_date,is_overdue,days_until_due,age_days,ransomware_use,required_action
 CVE-2021-27104,Accellion,FTA,2021-11-03,2021-11-17,True,-1796,1810,Known,Apply updates per vendor instructions.
 CVE-2021-27102,Accellion,FTA,2021-11-03,2021-11-17,True,-1796,1810,Known,Apply updates per vendor instructions.
