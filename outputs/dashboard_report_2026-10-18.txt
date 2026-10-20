@@ -1,0 +1,81 @@
+KEV DASHBOARD / PRIORITIZATION
+CISA Catalog of Known Exploited Vulnerabilities
+Catalog version: 2026.10.16
+Released: 2026-10-16T17:15:48.8752Z
+Download date: 2026-10-18
+Reference date: 2026-10-18
+Full catalog entries: 1748
+Applied filters: None
+
+SUMMARY — SELECTED RECORDS
+total: 1748
+overdue_count: 1745
+due_soon_count: 3
+not_yet_due_count: 0
+no_due_date_count: 0
+mean_age_days: 1144.03
+median_age_days: 1346.00
+mean_days_until_due: -1102.37
+ransomware_known_count: 361
+
+DATA QUALITY — SELECTED RECORDS
+missing_date_added: None
+missing_due_date: None
+duplicate_cve_ids: None
+total_issues: 0
+
+TOP 10 VENDORS — COUNTS ≠ RISK
+Microsoft: 390
+Cisco: 101
+Apple: 95
+Adobe: 82
+Google: 75
+Oracle: 46
+Apache: 41
+Ivanti: 36
+Fortinet: 32
+Linux: 31
+Count statistics (population standard deviation):
+  max: 390.00
+  min: 1.00
+  mean: 6.05
+  median: 1.00
+  std_dev: 25.44
+
+TOP 10 PRODUCTS — COUNTS ≠ RISK
+Windows: 173
+Multiple Products: 86
+Chromium V8: 41
+Internet Explorer: 36
+Kernel: 34
+Flash Player: 33
+Office: 29
+Win32k: 25
+Exchange Server: 17
+ColdFusion: 16
+Count statistics (population standard deviation):
+  max: 173.00
+  min: 1.00
+  mean: 2.48
+  median: 1.00
+  std_dev: 7.97
+
+PRIORITIZATION
+Overdue first (most overdue first); then earliest future deadline.
+Missing due dates last. Ties: oldest date_added first, missing dates last.
+Completely tied records keep their input order. No severity scores are invented.
+
+INTERPRETATION
+Counts reflect catalog presence, not vendor security or organizational risk.
+Overdue describes a catalog deadline, not proof that an organization is unpatched.
+Ransomware Unknown means unconfirmed use, not confirmed absence.
+Missing dates are excluded from the corresponding date statistics.
+Product counts combine identical product labels across vendors.
+All charts and the CSV use the same selected records as this report.
+
+OUTPUTS — alongside this report
+prioritized_worklist_2026-10-18.csv
+plot_top_vendors.png
+plot_due_status.png
+plot_monthly_trend.png
+plot_ransomware_by_vendor.png
