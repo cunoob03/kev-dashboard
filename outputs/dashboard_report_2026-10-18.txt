@@ -4,6 +4,7 @@ Catalog version: 2026.10.16
 Released: 2026-10-16T17:15:48.8752Z
 Download date: 2026-10-18
 Reference date: 2026-10-18
+Due-soon window: 0–14 days (inclusive)
 Full catalog entries: 1748
 Applied filters: None
 
@@ -18,11 +19,21 @@ median_age_days: 1346.00
 mean_days_until_due: -1102.37
 ransomware_known_count: 361
 
-DATA QUALITY — SELECTED RECORDS
-missing_date_added: None
-missing_due_date: None
-duplicate_cve_ids: None
-total_issues: 0
+DATA QUALITY — FULL INPUT CATALOG (before filters)
+Record numbers refer to the original input order, starting at 1.
+Issue flags can overlap; affected_record_count counts distinct rows.
+File/header issues: []
+{
+  "missing_cve_id": [],
+  "missing_vendor_project": [],
+  "missing_product": [],
+  "missing_date_added": [],
+  "missing_due_date": [],
+  "invalid_records": [],
+  "duplicate_cve_ids": {},
+  "total_issues": 0,
+  "affected_record_count": 0
+}
 
 TOP 10 VENDORS — COUNTS ≠ RISK
 Microsoft: 390
@@ -71,6 +82,7 @@ Overdue describes a catalog deadline, not proof that an organization is unpatche
 Ransomware Unknown means unconfirmed use, not confirmed absence.
 Missing dates are excluded from the corresponding date statistics.
 Product counts combine identical product labels across vendors.
+Missing vendor/product labels are shown explicitly; source values remain None.
 All charts and the CSV use the same selected records as this report.
 
 OUTPUTS — alongside this report
