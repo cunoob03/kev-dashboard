@@ -1,14 +1,23 @@
-"""Non-mutating filters for objects implementing the KEV record contract."""
+"""Non-mutating filters for the parser's VulnerabilityRecord objects."""
+
+from . import config
 
 
 def filter_by_vendor(records, vendor_name):
     """Match a complete vendor name, ignoring case."""
-    return [record for record in records if record.vendor.casefold() == vendor_name.casefold()]
+    return [
+        record for record in records
+        if record.vendor_project is not None
+        and record.vendor_project.casefold() == vendor_name.casefold()
+    ]
 
 
 def filter_by_product(records, product_name):
     """Match a complete product name, ignoring case."""
-    return [record for record in records if record.product.casefold() == product_name.casefold()]
+    return [
+        record for record in records
+        if record.product is not None and record.product.casefold() == product_name.casefold()
+    ]
 
 
 def filter_by_ransomware(records, ransomware_value):
@@ -16,21 +25,20 @@ def filter_by_ransomware(records, ransomware_value):
     value = ransomware_value.casefold()
     if value not in {"known", "unknown"}:
         raise ValueError("ransomware_value must be Known or Unknown")
-    return [record for record in records if record.ransomware_use.casefold() == value]
-
-
-def filter_by_due_status(records, status):
-    """Exclude undated records; today through day seven is due soon."""
-    checks = {
-        "overdue": lambda days: days < 0,
-        "due_soon": lambda days: 0 <= days <= 7,
-        "not_yet_due": lambda days: days > 7,
-    }
-    if status not in checks:
-        raise ValueError("status must be overdue, due_soon, or not_yet_due")
     return [
         record for record in records
-        if record.days_until_due is not None and checks[status](record.days_until_due)
+        if record.known_ransomware_campaign_use is not None
+        and record.known_ransomware_campaign_use.casefold() == value
+    ]
+
+
+def filter_by_due_status(records, status, reference_date=config.DEFAULT_REFERENCE_DATE):
+    """Use the model's shared date rules, including a no_due_date selection."""
+    if status not in {"overdue", "due_soon", "not_yet_due", "no_due_date"}:
+        raise ValueError("status must be overdue, due_soon, not_yet_due, or no_due_date")
+    return [
+        record for record in records
+        if record.due_status(reference_date) == status
     ]
 
 

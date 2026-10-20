@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .counters import count_by_vendor
+from . import config
 
 BLUE = "#3979a6"
 RED = "#bf4545"
@@ -25,12 +26,12 @@ def _chart(title, catalog_info):
     ax.set_facecolor("#f6f8fb")
     fig.suptitle(title, x=0.08, y=0.96, ha="left", fontsize=17, fontweight="bold")
     filters = "; ".join(catalog_info.get("applied_filters", [])) or "All records"
-    subtitle = (
+    provenance = (
         f"Catalog {catalog_info.get('catalog_version', 'Unknown')} | "
-        f"Reference {catalog_info.get('reference_date', 'Unknown')}\n"
-        f"Selection: {filters}"
+        f"Reference {catalog_info.get('reference_date', 'Unknown')} | "
+        f"Downloaded {catalog_info.get('download_date') or 'Unknown'}"
     )
-    fig.text(0.08, 0.90, fill(subtitle.split("\n")[0], 110) + "\n" + fill(subtitle.split("\n")[1], 110),
+    fig.text(0.08, 0.90, fill(provenance, 110) + "\n" + fill(f"Selection: {filters}", 110),
              va="top", fontsize=9, color="#435268")
     ax.spines[["top", "right"]].set_visible(False)
     ax.set_axisbelow(True)
@@ -74,9 +75,12 @@ def plot_top_vendors(counts_dict, catalog_info, output_path, top_n=10):
 
 def plot_due_status(worklist, catalog_info, output_path):
     stats = worklist.summary_stats()
-    fig, ax = _chart("Deadlines at the reference date", catalog_info)
+    info = dict(catalog_info)
+    info["reference_date"] = worklist.reference_date.isoformat()
+    fig, ax = _chart("Deadlines at the reference date", info)
     counts = [stats[key] for key in ("overdue_count", "due_soon_count", "not_yet_due_count")]
-    bars = ax.bar(["Overdue\n< 0 days", "Due soon\n0–7 days", "Not yet due\n> 7 days"],
+    bars = ax.bar(["Overdue\n< 0 days", f"Due soon\n0–{config.DUE_SOON_DAYS} days",
+                   f"Not yet due\n> {config.DUE_SOON_DAYS} days"],
                   counts, color=[RED, ORANGE, GREEN])
     ax.bar_label(bars, padding=5)
     ax.set_ylim(0, max(max(counts), 1) * 1.18)
@@ -98,6 +102,8 @@ def plot_monthly_trend(records, catalog_info, output_path):
         months = []
         while (current.year, current.month) <= end:
             months.append((current.year, current.month))
+            if (current.year, current.month) == end:
+                break
             current = date(current.year + current.month // 12, current.month % 12 + 1, 1)
         positions = np.arange(len(months))
         ax.bar(positions, [counts[month] for month in months], color=BLUE)
@@ -121,7 +127,10 @@ def plot_ransomware_by_vendor(records, catalog_info, output_path, top_n=10):
     if top_n < 1:
         raise ValueError("top_n must be positive")
     vendors = list(count_by_vendor(records))[:top_n]
-    counts = Counter((r.vendor, r.ransomware_use.casefold()) for r in records)
+    counts = Counter(
+        (r.vendor_project or "(missing vendor)", (r.known_ransomware_campaign_use or "").casefold())
+        for r in records
+    )
     fig, ax = _chart(f"Ransomware use — top {top_n} vendors", catalog_info)
     if vendors:
         positions = np.arange(len(vendors))
@@ -138,7 +147,8 @@ def plot_ransomware_by_vendor(records, catalog_info, output_path, top_n=10):
     else:
         _empty(ax)
     other = sum(
-        r.vendor in vendors and r.ransomware_use.casefold() not in {"known", "unknown"}
+        (r.vendor_project or "(missing vendor)") in vendors
+        and (r.known_ransomware_campaign_use or "").casefold() not in {"known", "unknown"}
         for r in records
     )
     _save(fig, output_path,

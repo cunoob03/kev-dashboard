@@ -119,6 +119,8 @@ def load_catalog(path=config.CATALOG_PATH):
     invalid JSON, or missing vulnerabilities list returns an empty record list
     and an explicit file issue. This is a failed load, not a valid empty catalog.
     A count mismatch is reported, but the actual records are still parsed.
+    load_succeeded distinguishes a parsed list (including an empty list) from
+    a failed load; it does not mean the parsed records have no quality issues.
 
     Only the bundled catalog has a known project-supplied download date. Other
     files get download_date=None; filesystem modification time is not evidence
@@ -134,6 +136,7 @@ def load_catalog(path=config.CATALOG_PATH):
         "file_name": path.name,
         "download_date": None,
         "file_issues": [],
+        "load_succeeded": False,
     }
     if path.resolve() == config.CATALOG_PATH.resolve():
         metadata["download_date"] = config.CATALOG_DOWNLOAD_DATE.isoformat()
@@ -175,6 +178,7 @@ def load_catalog(path=config.CATALOG_PATH):
         records.append(_parse_record(row))
 
     metadata["record_count"] = len(records)
+    metadata["load_succeeded"] = True
     if metadata["declared_record_count"] is not None:
         if metadata["declared_record_count"] != len(records):
             file_issues.append("Declared count does not match the actual record count.")

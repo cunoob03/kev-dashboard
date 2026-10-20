@@ -1,54 +1,65 @@
 # KEV prioritization rules and limitations
 
 The default reference date is **2026-10-18**, frozen for reproducible grading.
-It can be overridden through `--reference-date` or the Python API.
+It can be overridden through `--reference-date` or the Python API. Shared
+settings live in `src/config.py`; due soon uses `DUE_SOON_DAYS = 14`.
 
 ## Ordering
 
-1. Overdue records come first. A record is overdue only when
-   `days_until_due < 0`. The most negative value comes first.
-2. Other records with deadlines follow, earliest `due_date` first.
-   Due today is not overdue.
-3. Records without a due date go last.
-4. Ties use `date_added`, oldest first. Missing `date_added` goes after known dates,
-   including within the no-deadline group.
-5. Complete ties preserve source order for repeatability.
+1. Overdue records first: negative `days_until_due(reference_date)`, most negative first.
+2. Other records with deadlines follow, earliest due date first. Due today is not overdue.
+3. Records without a usable due date go last.
+4. Ties use the oldest `date_added` first; missing addition dates sort after known dates.
+5. Complete ties retain source order, including duplicate records.
 
-Ransomware use is an available filter and summary, not an additional sort key.
-No severity score is inferred or invented.
+Ransomware use is a filter and summary, not an extra priority key. No severity
+score or organization-specific risk score is inferred or invented.
 
-## Deadline groups and missing values
+## Deadline groups
 
 | Group | Days until due |
 | --- | --- |
 | Overdue | `< 0` |
-| Due soon | `0` through `7`, inclusive |
-| Not yet due | `> 7` |
-| No due date | `None`; excluded from deadline filters and chart bars |
+| Due soon | `0` through `14`, inclusive |
+| Not yet due | `> 14` |
+| No due date | `None` |
 
-Missing ages/due offsets are excluded from their corresponding means and
-medians. No observations produce `N/A`, not a fabricated zero. Data-quality
-reports list missing dates and duplicate CVE IDs. Each missing-date occurrence
-counts as one issue; each distinct duplicated CVE ID counts once. A record can
-therefore contribute more than one issue.
+Filters, worklist statistics, and CSV calculations call the model methods using
+the chosen reference date. Chart labels and report text use the shared threshold.
+`no_due_date` is available as a filter; the deadline chart discloses its count
+separately from its three dated bars.
+
+## Data quality
+
+Missing/invalid required fields and duplicate IDs are reported by the parser.
+Damaged rows remain in the worklist unless excluded by an explicit filter.
+Absent vendor/product labels form explicit `(missing vendor)` / `(missing product)`
+buckets without changing the underlying None values. Date-dependent filters
+exclude records lacking the relevant date, except the explicit no-due-date filter.
+
+The report shows quality findings for the full input before selection. It includes
+source row numbers, file/header problems, individual issue flags, and distinct
+affected-record counts. A single invalid date can have two flags (unavailable
+value and invalid-value explanation). Invalid JSON or a missing record list is a
+failed load and cannot be presented as a clean empty dashboard.
+
+Missing ages/due offsets are excluded from their corresponding statistics.
+No observations produce `N/A`, not a fabricated zero.
 
 ## Interpretation
 
-- KEV entries are known exploited vulnerabilities; the catalog does not provide
-  a numeric severity score. NVD/CVSS enrichment is outside this dashboard's scope.
-- Vendor counts describe catalog presence, not vendor security or an
-  organization's exposure. Product counts combine identical product labels,
-  including generic labels such as “Multiple Products”.
-- “Unknown” ransomware use means CISA has not confirmed use. It does not mean
-  ransomware use is absent. Other/missing ransomware values are excluded from
-  the two chart bars and their excluded count is disclosed.
-- “Overdue” describes a catalog deadline relative to the selected date. The
-  catalog provides no organization-specific asset inventory or remediation
-  status, so this is not proof that a system remains unpatched.
-- Catalog addition dates are not dates of first exploitation. Monthly charts
-  include zero-count months between the first and last observed month.
-- Reference-date overrides recalculate arithmetic, but do not download a newer
-  catalog or reconstruct historical membership.
-- Filters combine with AND. All generated outputs describe the same selection;
-  the report also identifies the full source catalog count.
-- This program analyzes the supplied catalog. It does not scan or exploit systems.
+- KEV identifies known exploited vulnerabilities but supplies no numeric severity
+  score. CVSS/NVD enrichment is outside this project.
+- Vendor counts describe catalog presence, not vendor security or an organization's
+  exposure. Product counts combine identical labels across vendors.
+- Ransomware “Unknown” means unconfirmed use, not confirmed absence. Other/missing
+  values are excluded from the two ransomware bars and the excluded count is shown.
+- “Overdue” describes a catalog deadline, not proof that an organization remains
+  unpatched. The catalog provides no organization-specific remediation status.
+- Monthly additions use `date_added`, not the date of first exploitation. Zero-count
+  months between the first and last observed month are included.
+- Reference-date changes recalculate arithmetic; they do not download a newer
+  catalog or reconstruct historical catalog membership.
+- Filters combine with AND. All charts, counts, and exported worklist rows use
+  the same selection; provenance and quality findings describe the full source.
+- The program reads local JSON only. It does not call remote APIs, scan, or exploit systems.
