@@ -9,10 +9,10 @@ It uses only Python's standard library. No network calls are made.
 """
 
 import argparse
-import random
 
 from . import config
 from .parser import find_data_quality_issues, load_catalog, parse_date
+from .sampling import sample_positions
 
 
 def print_sample(path=config.CATALOG_PATH, reference_date=config.DEFAULT_REFERENCE_DATE):
@@ -44,12 +44,10 @@ def print_sample(path=config.CATALOG_PATH, reference_date=config.DEFAULT_REFEREN
             if name not in ("total_issues", "affected_record_count") and values:
                 print(f"{name}: {values}")
 
-    sample_size = min(30, len(records))
-    generator = random.Random(42)
     # Select positions so the printed source row number can locate each record.
-    positions = generator.sample(range(len(records)), sample_size)
+    positions = sample_positions(records)
 
-    print(f"\nRANDOM SAMPLE: {sample_size} records (seed 42)")
+    print(f"\nRANDOM SAMPLE: {len(positions)} records (seed {config.VERIFICATION_SEED})")
     for sample_number, position in enumerate(positions, start=1):
         record = records[position]
         print(f"\n{sample_number}. {record.cve_id} (source record {position + 1})")

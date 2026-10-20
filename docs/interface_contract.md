@@ -1,100 +1,123 @@
-# Parser → dashboard interface
+# Integrated parser → dashboard contract
 
-This is the proposed implementation contract for teammate review. It has not
-yet been confirmed by the parser teammate. The parser supplies
-`(list[KEVRecord], catalog_info)`; records may be dataclasses or ordinary objects.
-The dashboard reads attributes, not dictionary keys, and does not mutate input
-records, their CWE lists, the input list, or metadata.
+The project uses one parser, one record model, and one date policy. The dashboard
+reads `VulnerabilityRecord` directly. The old `KEVRecord` adapter and its duplicate
+JSON/date parsing have been removed.
+
+## Decisions
+
+- `src/config.py` is the source for the reference date, catalog path, download
+  date, due-soon window, and verification sample settings.
+- Default reference date: **2026-10-18**, never today's date automatically.
+- Due soon: **0 through 14 days inclusive**. Change `DUE_SOON_DAYS` in config.py
+  to change the project-wide policy; model, filters, charts, and reports use it.
+- Preserve the parser's names and methods. Do not add fixed-reference-date
+  property aliases: those can silently disagree with an overridden report date.
+- `load_catalog(path)` returns **(metadata, records)**, in that order.
+- Retain damaged rows and duplicates. Report source problems before filtering.
+- Both verification tools select the same source rows using seed 42.
+
+These are implementation decisions, not a claim of human review or sign-off.
 
 ## Record attributes
 
-| Attribute | Type | JSON source or calculation |
+| Attribute | Type | Exact JSON source |
 | --- | --- | --- |
-| `cve_id` | `str` | `cveID` |
-| `vendor` | `str` | `vendorProject` |
-| `product` | `str` | `product` |
-| `vuln_name` | `str` | `vulnerabilityName` |
-| `date_added` | `datetime.date \| None` | Parsed `dateAdded` |
-| `due_date` | `datetime.date \| None` | Parsed `dueDate` |
-| `short_description` | `str` | `shortDescription` |
-| `required_action` | `str` | `requiredAction` |
-| `ransomware_use` | `str` | `knownRansomwareCampaignUse` |
-| `notes` | `str` | `notes` |
-| `cwes` | `list[str]` | `cwes` |
-| `age_days` | `int \| None` | `(reference_date - date_added).days` |
-| `days_until_due` | `int \| None` | `(due_date - reference_date).days` |
-| `is_overdue` | `bool` | `days_until_due is not None and days_until_due < 0` |
+| `cve_id` | `str` or `None` | `cveID` |
+| `vendor_project` | `str` or `None` | `vendorProject` |
+| `product` | `str` or `None` | `product` |
+| `vulnerability_name` | `str` or `None` | `vulnerabilityName` |
+| `date_added` | `datetime.date` or `None` | `dateAdded` |
+| `due_date` | `datetime.date` or `None` | `dueDate` |
+| `short_description` | `str` or `None` | `shortDescription` |
+| `required_action` | `str` or `None` | `requiredAction` |
+| `known_ransomware_campaign_use` | `str` or `None` | `knownRansomwareCampaignUse` |
+| `forensic_triage` | `str` or `None` | `forensicTriage` |
+| `notes` | `str` or `None` | `notes` |
+| `cwes` | `list[str]` or `None` | `cwes` |
 
-All attributes must exist. Missing dates become `None`; their corresponding
-derived integers are `None`. Missing due dates imply `is_overdue=False`.
-Dates are calendar dates, not datetimes. Negative ages are retained if a caller
-chooses a reference date before a record's addition; changing the reference date
-does not reconstruct an earlier catalog snapshot.
+Missing/invalid values become `None`; an empty CWE list is valid. The parser
+validates required text, CVE identifier format, date format/calendar validity,
+and the types of optional fields. It retains the original meaningful text.
+`validation_issues` is a separate diagnostic list, not a claimed CISA field.
 
-Direct calls to filters and `PrioritizedWorklist` assume these computed fields
-are mutually consistent and use the same reference date. `generate_dashboard`
-copies and recalculates all date-derived fields itself. With no override, it
-always uses `2026-10-18`, rather than the system clock or metadata date.
-
-## Metadata
+The model methods all accept an optional `reference_date`:
 
 ```python
-catalog_info = {
-    "title": "CISA Catalog of Known Exploited Vulnerabilities",
-    "catalog_version": "2026.10.16",
-    "date_released": "2026-10-16T17:15:48.8752Z",
-    "total_count": 1748,
-    "download_date": "2026-10-18",
-    "reference_date": "2026-10-18",
-}
+record.age_in_days(reference_date)     # reference_date - date_added, or None
+record.days_until_due(reference_date) # due_date - reference_date, or None
+record.due_status(reference_date)     # overdue / due_soon / not_yet_due / no_due_date
 ```
 
-`total_count` describes the complete source catalog; selected counts are computed
-separately. Unknown provenance should be explicitly reported as `"Unknown"`.
-The dashboard copies metadata and sets `reference_date` to the actual calculation
-date. Chart metadata additionally includes the applied filter descriptions.
+Days until due is negative for overdue records. Due today is due soon. Missing
+addition dates do not prevent deadline calculations, and vice versa. Negative
+ages are retained when the chosen date precedes addition to the catalog.
 
-## Entry points
+## Metadata and quality
+
+The metadata dictionary contains `title`, `catalog_version`, `date_released`,
+`record_count` (actual rows), `declared_record_count`, `file_name`, `download_date`,
+`file_issues`, and `load_succeeded`.
+
+The bundled file's download date is supplied by the project, not inferred from
+its modification time or confused with its release date. Other files use `None`
+unless a caller supplies documented provenance; the dashboard CLI accepts
+`--download-date` for that purpose.
+
+`load_succeeded=False` means reading the catalog structure failed. A parsed empty
+list has `load_succeeded=True`, even though it has zero records. Success of the
+load does not guarantee that all records are valid: inspect `file_issues` and
+`find_data_quality_issues(records)` separately.
+
+The quality dictionary includes missing required fields/dates, invalid-record
+messages, duplicate IDs with source positions, `total_issues`, and
+`affected_record_count`. Positions start at 1. An invalid date creates both an
+unavailable-date flag and an invalid-value explanation; issue flags can overlap.
+Duplicates count once per distinct duplicated ID, while all duplicate rows count
+as affected records. Invalid/missing CVE IDs are not grouped as a duplicate ID.
+
+Dashboard quality reporting covers the full original input before filtering.
+Summary statistics, counts, charts, and worklist rows cover the selected records.
+This preserves source positions and prevents filters from hiding input problems.
+
+## Python integration
 
 ```python
 from datetime import date
+from src.parser import load_catalog
 from src.dashboard import generate_dashboard
-from src.prioritizer import PrioritizedWorklist
 
-# Use the parser teammate's objects directly.
+metadata, records = load_catalog()
 report_path = generate_dashboard(
     records,
-    catalog_info,
-    reference_date=date(2026, 10, 18),
+    metadata,
+    reference_date=date(2026, 10, 20),
     vendor_filter="Microsoft",
-    output_dir="outputs/microsoft",
+    output_dir="outputs/microsoft-2026-10-20",
 )
-
-# For already-normalized records:
-worklist = PrioritizedWorklist(records, catalog_info)
-stats = worklist.summary_stats()
 ```
 
-`generate_dashboard` supports the outline's parameters plus an optional
-`output_dir`. It returns the text report's path as a string and prints the report.
-It generates all four charts and a prioritized CSV from the filtered selection.
-This follows the outline's integration requirement that charts reflect filters;
-the monthly-plot docstring's conflicting “all records, not filtered” note is not
-used. Call `plot_monthly_trend` with the full list separately if a full-catalog
-comparison is needed.
+`generate_dashboard` returns the text report path and prints the report. It rejects
+metadata indicating a failed load, but generates reports for recoverable data
+issues. It does not mutate records or input metadata. `PrioritizedWorklist` also
+accepts `reference_date`; its metadata is set to the actual calculation date.
+Every date calculation uses model methods with that explicit date.
 
-The standalone `load_catalog` adapter handles JSON input for the CLI. It rejects
-invalid nonempty dates and count mismatches with explicit errors. Missing/empty
-dates are allowed and reported as data-quality issues. Duplicate IDs are retained
-and flagged, never silently deduplicated in dashboard totals.
+For the CLI, exit status 0 means a clean run; 1 means outputs exist but source
+quality issues were detected; 2 means invalid arguments or a fatal load/output
+error. No outputs are produced for a failed catalog load.
 
-## Empty input and exports
+## CSV compatibility and empty selections
 
-- Statistics with no numeric observations return `None`, displayed as `N/A`.
-- Counts and date-status totals remain zero.
-- `count_summary_stats` uses NumPy population standard deviation (`ddof=0`).
-- CSV dates are ISO `YYYY-MM-DD`; missing values are empty cells.
-- CSV booleans are `True`/`False`; the first line is provenance, the second is
-  the column header. Use Python's CSV reader to handle quoted commas/newlines.
-- Record references are read-only by convention. `get_records()` returns a new
-  list; it does not deep-copy every contained object.
+The published CSV column order remains unchanged. The column `vendor` reads
+`vendor_project`; `ransomware_use` reads `known_ransomware_campaign_use`;
+`age_days`, `days_until_due`, and `is_overdue` are calculated for the worklist's
+reference date. These are export column names, not extra model attributes.
+
+The first CSV line starts with `#` and gives version, download date, reference
+date, and the due-soon policy. Skip it before using `csv.DictReader`. Dates are
+ISO `YYYY-MM-DD`, missing values are empty cells, and booleans are True/False.
+
+Empty selections generate a report, a header-only CSV, and four charts. Numeric
+statistics without observations return `None`, displayed as `N/A`; counts remain
+zero. Count summaries use NumPy population standard deviation (`ddof=0`).
