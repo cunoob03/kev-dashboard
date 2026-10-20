@@ -1,0 +1,70 @@
+KEV DASHBOARD TEAM HANDOFF — DUY
+================================
+
+Purpose
+-------
+This note explains the dashboard and prioritization implementation so teammates
+can review, maintain, and extend it without rediscovering project decisions.
+
+Current scope owned by Duy
+--------------------------
+- Dashboard orchestration, report generation, and command-line UX.
+- Record filtering, prioritization, vendor/product counts, and NumPy summaries.
+- CSV worklist export and the four Matplotlib charts.
+- Dashboard test fixtures and dashboard-focused automated tests.
+- Dashboard report/worklist/plot artifacts in outputs/.
+
+Main files
+----------
+- src/dashboard.py      CLI, selection flow, report text, output generation.
+- src/prioritizer.py    Transparent worklist ordering and summary statistics.
+- src/filters.py        Vendor, product, ransomware, deadline, and date filters.
+- src/counters.py       Vendor/product counting and NumPy summary helpers.
+- src/export.py         Provenance-aware prioritized CSV writer.
+- src/plots.py          Four headless Matplotlib chart functions.
+- src/constants.py      Output filenames and published CSV column order.
+- src/test_data.py      Ten-record dashboard fixture.
+- tests/test_dashboard.py
+
+Behavior to preserve
+--------------------
+1. Filters combine with AND. Vendor and product matching is exact and
+   case-insensitive; date ranges apply to date_added and are inclusive.
+2. The reference date must be passed consistently to filtering, ordering,
+   statistics, charting, and CSV export.
+3. Worklist order is: overdue first (most overdue first), then valid future
+   deadlines (earliest first), then missing due dates. Ties use oldest
+   date_added; complete ties retain input order.
+4. Do not introduce severity, CVSS, or organization-specific risk scores.
+   The KEV catalog does not provide them.
+5. All charts, report counts, and CSV rows must use the same selected records.
+6. Full-source data quality is reported before filters; filters must not make
+   source problems disappear.
+7. Empty selections remain valid: create a report, header-only worklist, and
+   readable charts rather than failing.
+
+How to run and test this area
+-----------------------------
+python -m src.dashboard
+python -m src.dashboard --vendor Microsoft --output-dir outputs/microsoft
+python -m src.dashboard --product Windows --ransomware Known --due-status overdue \
+  --output-dir outputs/windows-overdue
+python -m unittest discover -s tests -p "test_dashboard.py" -v
+
+Useful review checklist
+-----------------------
+- Confirm report, CSV, and all four charts use the same filter selection.
+- Confirm generated outputs identify catalog version, download date, and
+  reference date where relevant.
+- Inspect chart labels and captions for accurate, non-misleading interpretation.
+- Open the CSV in a spreadsheet and remember its first line is provenance, not
+  a CSV header.
+- Re-run tests after changing a sorting, filter, chart, or export rule.
+
+Coordination boundary
+---------------------
+The parser and date model belong to the shared integration contract maintained
+with Khoa's parser/date work. Before changing a record attribute, date-status
+definition, parser return value, or config setting, update the contract and
+coordinate with the parser/date owner. Validation teammates can independently
+review dashboard outputs and document issues without duplicating the dashboard.

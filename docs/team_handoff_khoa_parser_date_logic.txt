@@ -1,0 +1,68 @@
+KEV PARSER AND DATE-LOGIC TEAM HANDOFF — KHOA
+=============================================
+
+Purpose
+-------
+This note describes the catalog parser, record model, date calculations, and
+verification utilities so teammates can safely review or extend the data layer.
+
+Current scope owned by Khoa
+---------------------------
+- Shared catalog configuration and frozen reference-date policy.
+- VulnerabilityRecord model, parser, and tolerant data-quality reporting.
+- Date parsing, age/due calculations, and deadline statuses.
+- Parser-focused tests, reproducible sampling, and date-verification utilities.
+- Parser-to-dashboard integration and interface documentation.
+
+Main files
+----------
+- src/config.py          Shared catalog path, dates, and verification settings.
+- src/models.py          VulnerabilityRecord and date/status methods.
+- src/parser.py          JSON loading, field validation, and quality reporting.
+- src/sampling.py        Deterministic source-row selection.
+- src/sample_check.py    Console sample for manual source review.
+- src/verification.py    CSV worksheet and worked arithmetic examples.
+- tests/test_parser.py   Parser, malformed-input, and date-boundary tests.
+- docs/interface_contract.md
+
+Behavior to preserve
+--------------------
+1. load_catalog(path) returns (metadata, records), in that order.
+2. Bad record fields become None and are reported; malformed rows and duplicate
+   CVE IDs are retained rather than silently discarded.
+3. The model exposes date_added and due_date as date objects or None. All date
+   calculations accept an explicit reference date.
+4. Deadline groups use config.DUE_SOON_DAYS: overdue is less than 0, due_soon
+   is 0 through the limit inclusive, not_yet_due is above the limit, and missing
+   due dates are no_due_date.
+5. Due today is due_soon, not overdue. Missing date_added must not prevent due
+   calculations, and missing due_date must not prevent age calculations.
+6. File/header problems are distinct from record-quality issues. A failed file
+   load is not the same as a valid empty catalog.
+7. The bundled snapshot's download date is project provenance; do not infer it
+   from a file's modification timestamp.
+
+How to run and test this area
+-----------------------------
+python -m unittest discover -s tests -p "test_parser.py" -v
+python -m src.sample_check
+python -m src.verification
+
+Verification handoff
+--------------------
+sample_check and verification use seed 42 and select the same 30 distinct
+source-row positions from the frozen input. verification writes a worksheet and
+five worked arithmetic examples. These artifacts support manual review but do
+not count as manual sign-off by themselves.
+
+For human review, compare each selected source row against the frozen JSON;
+check date_added, due_date, age, days_until_due, overdue flag, and final status.
+Record the reviewer and date in the validation documentation after the review is
+actually completed.
+
+Coordination boundary
+---------------------
+Dashboard code consumes VulnerabilityRecord objects directly. Before renaming
+an attribute, changing a date rule, changing load_catalog's return order, or
+editing config defaults, coordinate with the dashboard owner and update
+docs/interface_contract.md plus the affected tests.
