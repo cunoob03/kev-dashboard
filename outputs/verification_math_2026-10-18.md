@@ -1,6 +1,7 @@
 # Date calculation examples
 
-Generated arithmetic examples for human review; manual review completed and verified by Validation Lead.
+
+Generated arithmetic examples for human review; manual review is still pending.
 
 Catalog version: 2026.10.16
 Download date: 2026-10-18
