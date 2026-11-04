@@ -92,8 +92,8 @@ FAKE_RECORDS = [
 FAKE_CATALOG_INFO = {
     "title": "FAKE Catalog for Testing",
     "catalog_version": "TEST-1.0",
-    "date_released": "2026-10-18T00:00:00Z",
+    "date_released": "2026-11-04T00:00:00Z",
     "record_count": 10,
-    "download_date": "2026-10-18",
+    "download_date": "2026-11-04",
     "reference_date": config.DEFAULT_REFERENCE_DATE.isoformat(),
 }
