@@ -1,0 +1,93 @@
+KEV DASHBOARD / PRIORITIZATION
+CISA Catalog of Known Exploited Vulnerabilities
+Catalog version: 2026.11.03
+Released: 2026-11-03T20:00:24.8741Z
+Download date: 2026-11-04
+Reference date: 2026-11-04
+Due-soon window: 0–14 days (inclusive)
+Full catalog entries: 1767
+Applied filters: None
+
+SUMMARY — SELECTED RECORDS
+total: 1767
+overdue_count: 1762
+due_soon_count: 5
+not_yet_due_count: 0
+no_due_date_count: 0
+mean_age_days: 1148.65
+median_age_days: 1352.00
+mean_days_until_due: -1107.37
+ransomware_known_count: 361
+
+DATA QUALITY — FULL INPUT CATALOG (before filters)
+Record numbers refer to the original input order, starting at 1.
+Issue flags can overlap; affected_record_count counts distinct rows.
+File/header issues: []
+{
+  "missing_cve_id": [],
+  "missing_vendor_project": [],
+  "missing_product": [],
+  "missing_date_added": [],
+  "missing_due_date": [],
+  "invalid_records": [],
+  "duplicate_cve_ids": {},
+  "total_issues": 0,
+  "affected_record_count": 0
+}
+
+TOP 10 VENDORS — COUNTS ≠ RISK
+Microsoft: 390
+Cisco: 102
+Apple: 95
+Adobe: 83
+Google: 76
+Oracle: 46
+Apache: 41
+Ivanti: 38
+Fortinet: 32
+Linux: 32
+Count statistics (population standard deviation):
+  max: 390.00
+  min: 1.00
+  mean: 6.07
+  median: 1.00
+  std_dev: 25.40
+
+TOP 10 PRODUCTS — COUNTS ≠ RISK
+Windows: 173
+Multiple Products: 86
+Chromium V8: 41
+Internet Explorer: 36
+Kernel: 35
+Flash Player: 33
+Office: 29
+Win32k: 25
+Exchange Server: 17
+ColdFusion: 16
+Count statistics (population standard deviation):
+  max: 173.00
+  min: 1.00
+  mean: 2.48
+  median: 1.00
+  std_dev: 7.94
+
+PRIORITIZATION
+Overdue first (most overdue first); then earliest future deadline.
+Missing due dates last. Ties: oldest date_added first, missing dates last.
+Completely tied records keep their input order. No severity scores are invented.
+
+INTERPRETATION
+Counts reflect catalog presence, not vendor security or organizational risk.
+Overdue describes a catalog deadline, not proof that an organization is unpatched.
+Ransomware Unknown means unconfirmed use, not confirmed absence.
+Missing dates are excluded from the corresponding date statistics.
+Product counts combine identical product labels across vendors.
+Missing vendor/product labels are shown explicitly; source values remain None.
+All charts and the CSV use the same selected records as this report.
+
+OUTPUTS — alongside this report
+prioritized_worklist_2026-11-04.csv
+plot_top_vendors.png
+plot_due_status.png
+plot_monthly_trend.png
+plot_ransomware_by_vendor.png
