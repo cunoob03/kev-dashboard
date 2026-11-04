@@ -11,11 +11,11 @@ vulnerabilities, or contact remote services during normal use.
 | Item | Value |
 | --- | --- |
 | Source | [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) |
-| Bundled snapshot | `data/known_exploited_vulnerabilities_2026-10-18.json` |
-| Catalog version | `2026.10.16` |
-| Download date | `2026-10-18` |
-| Frozen reference date | `2026-10-18` |
-| Records in snapshot | 1,748 |
+| Bundled snapshot | `data/known_exploited_vulnerabilities_2026-11-04.json` |
+| Catalog version | `2026.11.03` |
+| Download date | `2026-11.04` |
+| Frozen reference date | `2026-11-04` |
+| Records in snapshot | 1,767 |
 | Supported Python | 3.11+ |
 
 Snapshot integrity (SHA-256):
@@ -70,8 +70,8 @@ The command prints the report and creates these files in `outputs/`:
 
 | Output | Purpose |
 | --- | --- |
-| `dashboard_report_2026-10-18.txt` | Provenance, filters, statistics, data quality, rankings, rules, and limitations |
-| `prioritized_worklist_2026-10-18.csv` | Selected records in transparent remediation order |
+| `dashboard_report_2026-11.04.txt` | Provenance, filters, statistics, data quality, rankings, rules, and limitations |
+| `prioritized_worklist_2026-11-04.csv` | Selected records in transparent remediation order |
 | `plot_top_vendors.png` | Top vendors by catalog presence |
 | `plot_due_status.png` | Overdue, due-soon, and not-yet-due counts |
 | `plot_monthly_trend.png` | Catalog additions per month, including zero-count months |
@@ -93,7 +93,7 @@ python -m src.dashboard --product Windows --ransomware Known \
   --due-status overdue --output-dir outputs/windows-overdue
 
 # Inclusive date_added range
-python -m src.dashboard --start-date 2026-01-01 --end-date 2026-10-18 \
+python -m src.dashboard --start-date 2026-01-01 --end-date 2026-11-04 \
   --output-dir outputs/recent
 
 # Recalculate without changing the frozen input snapshot
@@ -152,8 +152,8 @@ leap days, deadline boundaries, sorting stability, CSV quoting, empty outputs,
 filtering, reference-date overrides, and the full frozen catalog. The sample
 tools consistently select 30 distinct source rows using seed 42 and create:
 
-- `outputs/verification_sample_2026-10-18.csv`
-- `outputs/verification_math_2026-10-18.md`
+- `outputs/verification_sample_2026-11-04.csv`
+- `outputs/verification_math_2026-11-04.md`
 
 The worksheet independently checks age, due offsets, overdue flags, and all
 four deadline states. It supports—but does not replace—the required human
