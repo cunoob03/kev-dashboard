@@ -35,7 +35,7 @@ File/header issues: []
   "affected_record_count": 0
 }
 
-TOP 10 VENDORS — COUNTS ≠ RISK
+TOP 10 VENDORS — COUNTS != RISK
 Microsoft: 390
 Cisco: 102
 Apple: 95
@@ -53,7 +53,7 @@ Count statistics (population standard deviation):
   median: 1.00
   std_dev: 25.40
 
-TOP 10 PRODUCTS — COUNTS ≠ RISK
+TOP 10 PRODUCTS — COUNTS != RISK
 Windows: 173
 Multiple Products: 86
 Chromium V8: 41

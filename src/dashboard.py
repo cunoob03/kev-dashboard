@@ -2,8 +2,16 @@
 
 import argparse
 import json
+import sys
 from datetime import date
 from pathlib import Path
+
+# Ensure UTF-8 output on platforms like Windows when possible
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 from . import config
 from .parser import load_catalog, parse_date, find_data_quality_issues
@@ -53,7 +61,7 @@ def build_report_text(worklist, vendor_counts, product_counts,
         json.dumps(data_quality_issues, indent=2, ensure_ascii=False),
     ]
     for title, counts in [("VENDORS", vendor_counts), ("PRODUCTS", product_counts)]:
-        lines += ["", f"TOP 10 {title} — COUNTS ≠ RISK"]
+        lines += ["", f"TOP 10 {title} — COUNTS != RISK"]
         lines.extend(f"{name}: {count}" for name, count in list(counts.items())[:10])
         if not counts:
             lines.append("No matching records.")
@@ -133,7 +141,10 @@ def generate_dashboard(records, catalog_info, reference_date=config.DEFAULT_REFE
     report = build_report_text(worklist, vendors, products, info, applied, issues)
     report_path = destination / f"dashboard_report_{reference}.txt"
     report_path.write_text(report, encoding="utf-8")
-    print(report)
+    try:
+        print(report)
+    except UnicodeEncodeError:
+        print(report.encode("ascii", errors="replace").decode("ascii"))
     return str(report_path)
 
 
@@ -146,6 +157,12 @@ def iso_date(value):
 
 
 def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, default=config.CATALOG_PATH)
     parser.add_argument("--reference-date", type=iso_date, default=config.DEFAULT_REFERENCE_DATE)

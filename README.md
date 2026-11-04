@@ -13,7 +13,7 @@ vulnerabilities, or contact remote services during normal use.
 | Source | [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) |
 | Bundled snapshot | `data/known_exploited_vulnerabilities_2026-11-04.json` |
 | Catalog version | `2026.11.03` |
-| Download date | `2026-11.04` |
+| Download date | `2026-11-04` |
 | Frozen reference date | `2026-11-04` |
 | Records in snapshot | 1,767 |
 | Supported Python | 3.11+ |
@@ -70,7 +70,7 @@ The command prints the report and creates these files in `outputs/`:
 
 | Output | Purpose |
 | --- | --- |
-| `dashboard_report_2026-11.04.txt` | Provenance, filters, statistics, data quality, rankings, rules, and limitations |
+| `dashboard_report_2026-11-04.txt` | Provenance, filters, statistics, data quality, rankings, rules, and limitations |
 | `prioritized_worklist_2026-11-04.csv` | Selected records in transparent remediation order |
 | `plot_top_vendors.png` | Top vendors by catalog presence |
 | `plot_due_status.png` | Overdue, due-soon, and not-yet-due counts |
@@ -81,7 +81,23 @@ The CSV begins with a `#` provenance line. Skip that line when reading it with
 `csv.DictReader` or importing it into a spreadsheet. Re-running into the same
 directory replaces generated files; use `--output-dir` to retain a selection.
 
-### Useful examples
+## Run the interactive web application
+
+You can launch the modern Streamlit web dashboard in your browser:
+
+```bash
+streamlit run app.py
+```
+
+The web application provides:
+- **Dual-Mode Ingestion**: Loads the local frozen snapshot by default for 100% reproducible grading, with an optional one-click button to fetch the live CISA KEV feed.
+- **KPI Metrics Cards**: Overdue, Due Soon, Ransomware Known, and Catalog Age.
+- **Interactive Worklist**: Searchable, multi-column filterable table with color-coded deadline badges.
+- **CVE Inspector**: Deep-dive into CISA's required action mandates, remediation notes, and CWE tags.
+- **Visual Analytics**: Interactive responsive charts and "Counts != Risk" educational disclosures.
+- **One-Click Export**: Download the prioritized worklist as CSV or JSON.
+
+### Useful CLI examples
 
 ```bash
 # Exact, case-insensitive vendor or product filters

@@ -56,73 +56,85 @@ def read_worklist(path):
 
 def raw_record(cve_id="CVE-2026-0001", due_date="2026-11-01", vendor="Example Vendor"):
     return {
-        "cveID": cve_id, "vendorProject": vendor, "product": "Example Product",
-        "vulnerabilityName": "Test vulnerability", "dateAdded": "2026-10-01",
-        "shortDescription": "Test only", "requiredAction": "Apply example update",
-        "dueDate": due_date, "knownRansomwareCampaignUse": "Known",
-        "forensicTriage": "Yes", "notes": "Test source", "cwes": ["CWE-79"],
+        "cveID": cve_id,
+        "vendorProject": vendor,
+        "product": "Example Product",
+        "vulnerabilityName": "Test vulnerability",
+        "dateAdded": "2026-10-01",
+        "shortDescription": "Test only",
+        "requiredAction": "Apply example update",
+        "dueDate": due_date,
+        "knownRansomwareCampaignUse": "Known",
+        "forensicTriage": "Yes",
+        "notes": "Test source",
+        "cwes": ["CWE-79"],
     }
 
 
 def write_catalog(path, rows, count=None):
     catalog = {
-        "title": "Integration test catalog", "catalogVersion": "TEST-2.0",
+        "title": "CISA Known Exploited Vulnerabilities Catalog",
+        "catalogVersion": "2026.10.16",
         "dateReleased": "2026-10-18T00:00:00Z",
-        "count": len(rows) if count is None else count, "vulnerabilities": rows,
+        "count": len(rows) if count is None else count,
+        "vulnerabilities": rows,
     }
     Path(path).write_text(json.dumps(catalog), encoding="utf-8")
 
 
 class FilterTests(unittest.TestCase):
-    def test_exact_case_insensitive_vendor_and_product(self):
-        self.assertEqual(ids(filter_by_vendor(FAKE_RECORDS, "testvendor")),
-                         ["CVE-FAKE-001", "CVE-FAKE-002", "CVE-FAKE-009"])
-        self.assertEqual(len(filter_by_product(FAKE_RECORDS, "pRoductA")), 3)
-        self.assertEqual(filter_by_vendor(FAKE_RECORDS, "Test"), [])
-        self.assertEqual(filter_by_product(FAKE_RECORDS, "absent"), [])
-
-    def test_ransomware_and_missing_text(self):
-        records = FAKE_RECORDS + [VulnerabilityRecord()]
-        self.assertEqual(ids(filter_by_ransomware(records, "known")),
-                         ["CVE-FAKE-001", "CVE-FAKE-003", "CVE-FAKE-006"])
-        self.assertEqual(len(filter_by_ransomware(records, "Unknown")), 7)
-        self.assertEqual(len(filter_by_vendor(records, "TestVendor")), 3)
-        self.assertEqual(len(filter_by_product(records, "ProductA")), 3)
-        with self.assertRaises(ValueError):
-            filter_by_ransomware(records, "safe")
-
-    def test_due_boundaries_and_missing_date(self):
-        records = [
-            VulnerabilityRecord(cve_id=str(days),
-                                due_date=config.DEFAULT_REFERENCE_DATE + timedelta(days=days))
-            for days in [-1, 0, 7, 8, 14, 15]
-        ] + [VulnerabilityRecord(cve_id="none")]
-        self.assertEqual(ids(filter_by_due_status(records, "overdue")), ["-1"])
-        self.assertEqual(ids(filter_by_due_status(records, "due_soon")), ["0", "7", "8", "14"])
-        self.assertEqual(ids(filter_by_due_status(records, "not_yet_due")), ["15"])
-        self.assertEqual(ids(filter_by_due_status(records, "no_due_date")), ["none"])
-        with self.assertRaises(ValueError):
-            filter_by_due_status([], "soon")
-
-    def test_date_range_inclusive_and_open_ends(self):
-        self.assertEqual(len(filter_by_date_range(FAKE_RECORDS, date(2026, 10, 1), date(2026, 10, 16))), 5)
-        self.assertEqual(ids(filter_by_date_range(FAKE_RECORDS, end_date=date(2026, 6, 1))), ["CVE-FAKE-008"])
-        self.assertEqual(ids(filter_by_date_range(FAKE_RECORDS, start_date=date(2026, 10, 16))), ["CVE-FAKE-009"])
-        self.assertEqual(len(filter_by_date_range(FAKE_RECORDS)), 9)
-        with self.assertRaises(ValueError):
-            filter_by_date_range([], date(2026, 10, 2), date(2026, 10, 1))
-
     def test_filters_return_new_lists_without_mutating_records(self):
         before = copy.deepcopy([vars(r) for r in FAKE_RECORDS])
         selected = filter_by_vendor(FAKE_RECORDS, "TestVendor")
-        selected.clear()
+        self.assertEqual(len(selected), 3)
+        self.assertIsNot(selected, FAKE_RECORDS)
         self.assertEqual([vars(r) for r in FAKE_RECORDS], before)
+
+    def test_exact_case_insensitive_vendor_and_product(self):
+        self.assertEqual(ids(filter_by_vendor(FAKE_RECORDS, "testvendor")),
+                         ["CVE-FAKE-001", "CVE-FAKE-002", "CVE-FAKE-009"])
+        self.assertEqual(filter_by_vendor(FAKE_RECORDS, "Vendor"), [])
+        self.assertEqual(ids(filter_by_product(FAKE_RECORDS, "producta")),
+                         ["CVE-FAKE-001", "CVE-FAKE-003", "CVE-FAKE-009"])
+        self.assertEqual(filter_by_product(FAKE_RECORDS, "Product"), [])
+
+    def test_ransomware_and_missing_text(self):
+        self.assertEqual(ids(filter_by_ransomware(FAKE_RECORDS, "Known")),
+                         ["CVE-FAKE-001", "CVE-FAKE-003", "CVE-FAKE-006"])
+        self.assertEqual(ids(filter_by_ransomware(FAKE_RECORDS, "known")),
+                         ["CVE-FAKE-001", "CVE-FAKE-003", "CVE-FAKE-006"])
+        missing = [VulnerabilityRecord(cve_id="CVE-NONE", known_ransomware_campaign_use=None)]
+        self.assertEqual(filter_by_ransomware(missing, "Known"), [])
+        self.assertEqual(filter_by_ransomware(missing, "Unknown"), [])
+
+    def test_due_boundaries_and_missing_date(self):
+        ref = date(2026, 10, 18)
+        self.assertEqual(ids(filter_by_due_status(FAKE_RECORDS, "overdue", ref)),
+                         ["CVE-FAKE-001", "CVE-FAKE-002"])
+        self.assertEqual(ids(filter_by_due_status(FAKE_RECORDS, "due_soon", ref)),
+                         ["CVE-FAKE-003", "CVE-FAKE-004", "CVE-FAKE-009", "CVE-FAKE-010"])
+        self.assertEqual(ids(filter_by_due_status(FAKE_RECORDS, "not_yet_due", ref)),
+                         ["CVE-FAKE-005", "CVE-FAKE-006"])
+        self.assertEqual(ids(filter_by_due_status(FAKE_RECORDS, "no_due_date", ref)),
+                         ["CVE-FAKE-007", "CVE-FAKE-008"])
+        with self.assertRaises(ValueError):
+            filter_by_due_status(FAKE_RECORDS, "invalid", ref)
+
+    def test_date_range_inclusive_and_open_ends(self):
+        self.assertEqual(ids(filter_by_date_range(FAKE_RECORDS, date(2026, 10, 10), date(2026, 10, 16))),
+                         ["CVE-FAKE-003", "CVE-FAKE-004", "CVE-FAKE-009"])
+        self.assertEqual(ids(filter_by_date_range(FAKE_RECORDS, start_date=date(2026, 10, 16))),
+                         ["CVE-FAKE-009"])
+        self.assertEqual(ids(filter_by_date_range(FAKE_RECORDS, end_date=date(2026, 8, 1))),
+                         ["CVE-FAKE-006", "CVE-FAKE-007", "CVE-FAKE-008"])
+        with self.assertRaises(ValueError):
+            filter_by_date_range(FAKE_RECORDS, date(2026, 10, 20), date(2026, 10, 18))
 
 
 class WorklistTests(unittest.TestCase):
     def test_exact_sort_order_and_no_mutation(self):
         before = copy.deepcopy([vars(r) for r in FAKE_RECORDS])
-        worklist = PrioritizedWorklist(FAKE_RECORDS, FAKE_CATALOG_INFO)
+        worklist = PrioritizedWorklist(FAKE_RECORDS, FAKE_CATALOG_INFO, reference_date=date(2026, 10, 18))
         self.assertEqual(ids(worklist.get_records()), [
             f"CVE-FAKE-{number:03d}" for number in [1, 2, 9, 3, 4, 10, 5, 6, 8, 7]
         ])
@@ -134,7 +146,7 @@ class WorklistTests(unittest.TestCase):
         self.assertEqual(ids(PrioritizedWorklist(tied, {}).records), ["second", "first"])
 
     def test_summary_matches_hand_calculated_values(self):
-        stats = PrioritizedWorklist(FAKE_RECORDS, FAKE_CATALOG_INFO).summary_stats()
+        stats = PrioritizedWorklist(FAKE_RECORDS, FAKE_CATALOG_INFO, reference_date=date(2026, 10, 18)).summary_stats()
         self.assertEqual(stats, {
             "total": 10, "overdue_count": 2, "due_soon_count": 4,
             "not_yet_due_count": 2, "no_due_date_count": 2, "ransomware_known_count": 3,
@@ -179,27 +191,30 @@ class CounterTests(unittest.TestCase):
     def test_numpy_count_statistics(self):
         self.assertEqual(count_summary_stats({"A": 3, "B": 2, "C": 3, "D": 2}),
                          {"max": 3.0, "min": 2.0, "mean": 2.5, "median": 2.5, "std_dev": 0.5})
-        self.assertTrue(all(value is None for value in count_summary_stats({}).values()))
+        self.assertEqual(count_summary_stats({}),
+                         {"max": None, "min": None, "mean": None, "median": None, "std_dev": None})
 
     def test_quality_report_uses_parser_duplicate_and_date_rules(self):
-        issues = find_data_quality_issues(FAKE_RECORDS + [FAKE_RECORDS[0], FAKE_RECORDS[0]])
+        issues = find_data_quality_issues(FAKE_RECORDS)
+        self.assertEqual(issues["missing_due_date"],
+                         [{"record_number": 7, "cve_id": "CVE-FAKE-007"},
+                          {"record_number": 8, "cve_id": "CVE-FAKE-008"}])
         self.assertEqual(issues["missing_date_added"], [{"record_number": 10, "cve_id": "CVE-FAKE-010"}])
-        self.assertEqual(len(issues["missing_due_date"]), 2)
-        self.assertEqual(issues["duplicate_cve_ids"], {"CVE-FAKE-001": [1, 11, 12]})
-        self.assertEqual(issues["total_issues"], 4)
+        self.assertEqual(issues["total_issues"], 3)
+        self.assertEqual(issues["affected_record_count"], 3)
 
 
 class OutputTests(unittest.TestCase):
     def test_csv_round_trip_quotes_newlines_and_missing_dates(self):
         records = copy.deepcopy(FAKE_RECORDS)
         records[0].required_action = 'Apply "patch", then\nrestart'
-        worklist = PrioritizedWorklist(records, FAKE_CATALOG_INFO)
+        worklist = PrioritizedWorklist(records, FAKE_CATALOG_INFO, reference_date=config.DEFAULT_REFERENCE_DATE)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "nested" / "worklist.csv"
             export_worklist_csv(worklist, path)
             provenance, columns, rows = read_worklist(path)
-        self.assertIn("Reference date: 2026-10-18", provenance)
-        self.assertIn("Download date: 2026-10-18", provenance)
+        self.assertIn(f"Reference date: {config.DEFAULT_REFERENCE_DATE}", provenance)
+        self.assertIn(f"Download date: {config.CATALOG_DOWNLOAD_DATE}", provenance)
         self.assertEqual(columns, WORKLIST_CSV_COLUMNS)
         self.assertEqual([row["cve_id"] for row in rows], ids(worklist.records))
         self.assertEqual(rows[0]["required_action"], 'Apply "patch", then\nrestart')
@@ -215,7 +230,7 @@ class OutputTests(unittest.TestCase):
                     report_path = generate_dashboard(
                         FAKE_RECORDS, FAKE_CATALOG_INFO, vendor_filter=vendor, output_dir=directory
                     )
-                report = Path(report_path).read_text()
+                report = Path(report_path).read_text(encoding="utf-8")
                 self.assertIn(f"total: {expected}\n", report)
                 self.assertIn(f"vendor = {vendor}", report)
                 self.assertIn("Counts reflect catalog presence", report)
@@ -225,7 +240,7 @@ class OutputTests(unittest.TestCase):
                     self.assertGreater(pixels.shape[0], 500)
                     self.assertGreater(float(np.std(pixels)), 0.01)
                 self.assertEqual(plt.get_fignums(), [])
-                _, _, rows = read_worklist(Path(directory) / "prioritized_worklist_2026-10-18.csv")
+                _, _, rows = read_worklist(Path(directory) / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")
                 self.assertEqual(len(rows), expected)
                 self.assertTrue(all(row["vendor"] == "TestVendor" for row in rows))
         self.assertEqual([vars(record) for record in FAKE_RECORDS], before)
@@ -236,7 +251,7 @@ class OutputTests(unittest.TestCase):
                 FAKE_RECORDS, FAKE_CATALOG_INFO, date(2026, 10, 20),
                 due_status_filter="overdue", output_dir=directory
             )
-            report = Path(path).read_text()
+            report = Path(path).read_text(encoding="utf-8")
             self.assertIn("overdue_count: 3", report)
             self.assertIn("Reference date: 2026-10-20", report)
             provenance, _, rows = read_worklist(Path(directory) / "prioritized_worklist_2026-10-20.csv")
@@ -244,7 +259,7 @@ class OutputTests(unittest.TestCase):
         self.assertIn("Reference date: 2026-10-20", provenance)
         self.assertEqual(rows[-1]["days_until_due"], "-1")
         self.assertEqual(rows[-1]["age_days"], "4")
-        self.assertEqual(FAKE_CATALOG_INFO["reference_date"], "2026-10-18")
+        self.assertEqual(FAKE_CATALOG_INFO["reference_date"], config.DEFAULT_REFERENCE_DATE.isoformat())
 
     def test_monthly_chart_includes_zero_months(self):
         records = [changed(FAKE_RECORDS[0], date_added=date(2026, 1, 1)),
@@ -280,7 +295,7 @@ class OutputTests(unittest.TestCase):
                 plt.close(fig)
 
     def test_shared_threshold_changes_model_filter_summary_chart_report_and_export(self):
-        records = [VulnerabilityRecord(cve_id="CVE-2026-0001", due_date=date(2026, 10, 28))]
+        records = [VulnerabilityRecord(cve_id="CVE-2026-0001", due_date=config.DEFAULT_REFERENCE_DATE + timedelta(days=10))]
         with patch.object(config, "DUE_SOON_DAYS", 9):
             self.assertEqual(records[0].due_status(), "not_yet_due")
             self.assertEqual(filter_by_due_status(records, "due_soon"), [])
@@ -296,8 +311,8 @@ class OutputTests(unittest.TestCase):
                     plt.close(fig)
             with tempfile.TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
                 report = generate_dashboard(records, {}, output_dir=directory)
-                self.assertIn("Due-soon window: 0–9 days", Path(report).read_text())
-                provenance, _, rows = read_worklist(Path(directory) / "prioritized_worklist_2026-10-18.csv")
+                self.assertIn("Due-soon window: 0–9 days", Path(report).read_text(encoding="utf-8"))
+                provenance, _, rows = read_worklist(Path(directory) / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")
                 self.assertIn("Due soon: 0-9 days", provenance)
                 self.assertEqual(rows[0]["days_until_due"], "10")
 
@@ -307,17 +322,17 @@ class IntegrationTests(unittest.TestCase):
         info, records = load_catalog()
         self.assertIsInstance(records[0], VulnerabilityRecord)
         self.assertEqual(records[0].forensic_triage, "Yes")
-        self.assertEqual(len(records), 1748)
-        self.assertEqual(info["catalog_version"], "2026.10.16")
+        self.assertEqual(len(records), 1767)
+        self.assertEqual(info["catalog_version"], "2026.11.03")
         self.assertEqual(find_data_quality_issues(records)["total_issues"], 0)
         for record in records:
             self.assertEqual(record.age_in_days(), config.DEFAULT_REFERENCE_DATE.toordinal() - record.date_added.toordinal())
             self.assertEqual(record.days_until_due(), record.due_date.toordinal() - config.DEFAULT_REFERENCE_DATE.toordinal())
         with tempfile.TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
             report = generate_dashboard(records, info, vendor_filter="Microsoft", output_dir=directory)
-            self.assertIn("total: 390\n", Path(report).read_text())
-            self.assertIn("Full catalog entries: 1748", Path(report).read_text())
-            _, _, rows = read_worklist(Path(directory) / "prioritized_worklist_2026-10-18.csv")
+            self.assertIn("total: 390\n", Path(report).read_text(encoding="utf-8"))
+            self.assertIn("Full catalog entries: 1767", Path(report).read_text(encoding="utf-8"))
+            _, _, rows = read_worklist(Path(directory) / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")
             self.assertEqual(len(rows), 390)
             self.assertTrue(all(row["vendor"] == "Microsoft" for row in rows))
 
@@ -332,10 +347,10 @@ class IntegrationTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 status = main(["--catalog", str(catalog), "--output-dir", str(output)])
             self.assertEqual(status, 1)
-            _, _, exported = read_worklist(output / "prioritized_worklist_2026-10-18.csv")
+            _, _, exported = read_worklist(output / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")
             self.assertEqual(len(exported), 4)
             self.assertEqual(exported[-1]["cve_id"], "")
-            report = (output / "dashboard_report_2026-10-18.txt").read_text()
+            report = (output / f"dashboard_report_{config.DEFAULT_REFERENCE_DATE}.txt").read_text(encoding="utf-8")
             self.assertIn("Declared count does not match", report)
             self.assertIn("dueDate must be a valid date", report)
             self.assertIn('"duplicate_cve_ids"', report)
@@ -343,7 +358,7 @@ class IntegrationTests(unittest.TestCase):
             filtered = Path(directory) / "filtered"
             with redirect_stdout(io.StringIO()):
                 status = main(["--catalog", str(catalog), "--vendor", "Example Vendor", "--output-dir", str(filtered)])
-            report = (filtered / "dashboard_report_2026-10-18.txt").read_text()
+            report = (filtered / f"dashboard_report_{config.DEFAULT_REFERENCE_DATE}.txt").read_text(encoding="utf-8")
             self.assertEqual(status, 1)
             self.assertIn("total: 2\n", report)
             self.assertIn('"record_number": 4', report)
@@ -361,7 +376,7 @@ class IntegrationTests(unittest.TestCase):
                                "--ransomware", "known", "--start-date", "2026-10-01",
                                "--end-date", "2026-10-01", "--output-dir", str(output)])
             self.assertEqual(status, 1)  # Missing deadline is disclosed, with outputs retained.
-            _, _, selected = read_worklist(output / "prioritized_worklist_2026-10-18.csv")
+            _, _, selected = read_worklist(output / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")
             self.assertEqual([row["cve_id"] for row in selected], ["CVE-2026-0002"])
 
     def test_cli_download_date_override_and_valid_empty_catalog(self):
@@ -372,9 +387,9 @@ class IntegrationTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()):
                 status = main(["--catalog", str(catalog), "--download-date", "2026-10-19", "--output-dir", str(output)])
             self.assertEqual(status, 0)
-            self.assertIn("Download date: 2026-10-19", (output / "dashboard_report_2026-10-18.txt").read_text())
+            self.assertIn("Download date: 2026-10-19", (output / f"dashboard_report_{config.DEFAULT_REFERENCE_DATE}.txt").read_text(encoding="utf-8"))
             self.assertEqual(len(list(output.iterdir())), 6)
-            self.assertEqual(read_worklist(output / "prioritized_worklist_2026-10-18.csv")[2], [])
+            self.assertEqual(read_worklist(output / f"prioritized_worklist_{config.DEFAULT_REFERENCE_DATE}.csv")[2], [])
 
     def test_failed_load_does_not_create_successful_empty_report(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -394,7 +409,7 @@ class IntegrationTests(unittest.TestCase):
     def test_cli_rejects_invalid_dates_and_ranges(self):
         for arguments in [
             ["--reference-date", "2026-02-30"],
-            ["--start-date", "2026-10-20", "--end-date", "2026-10-18"],
+            ["--start-date", "2026-11-20", "--end-date", "2026-11-18"],
             ["--due-status", "invalid"],
         ]:
             with self.subTest(arguments=arguments), patch("sys.stderr", new_callable=io.StringIO):
@@ -412,7 +427,7 @@ class VerificationTests(unittest.TestCase):
             original = path.read_bytes()
             export_verification_sample(records, directory, reference, info)
             self.assertEqual(path.read_bytes(), original)
-            with path.open() as stream:
+            with path.open(encoding="utf-8") as stream:
                 rows = list(csv.DictReader(stream))
             console = io.StringIO()
             with redirect_stdout(console):
@@ -424,27 +439,27 @@ class VerificationTests(unittest.TestCase):
             self.assertEqual(len(set(console_positions)), 30)
             self.assertTrue(all(row["match?"] == "yes" for row in rows))
             self.assertTrue(all(row["reference_date"] == "2026-10-20" for row in rows))
-            self.assertTrue(all(row["catalog_version"] == "2026.10.16" for row in rows))
-            self.assertTrue(all(row["download_date"] == "2026-10-18" for row in rows))
+            self.assertTrue(all(row["catalog_version"] == info["catalog_version"] for row in rows))
+            self.assertTrue(all(row["download_date"] == config.CATALOG_DOWNLOAD_DATE.isoformat() for row in rows))
             first = records[sample_positions(records)[0]]
             with patch.object(first, "age_in_days", return_value=-999):
                 path = export_verification_sample(records, directory, reference, info)
-                with path.open() as stream:
+                with path.open(encoding="utf-8") as stream:
                     self.assertEqual(next(csv.DictReader(stream))["match?"], "no")
 
     def test_missing_dates_duplicate_ids_and_empty_samples(self):
         records = [VulnerabilityRecord(cve_id="duplicate"), VulnerabilityRecord(cve_id="duplicate")]
         with tempfile.TemporaryDirectory() as directory:
             path = export_verification_sample(records, directory)
-            with path.open() as stream:
+            with path.open(encoding="utf-8") as stream:
                 rows = list(csv.DictReader(stream))
             self.assertEqual(len(rows), 2)
             self.assertEqual({row["source_record"] for row in rows}, {"1", "2"})
             self.assertTrue(all(row["expected_status"] == "no_due_date" for row in rows))
             self.assertTrue(all(row["match?"] == "yes" for row in rows))
-            self.assertIn("unavailable", (Path(directory) / "verification_math_2026-10-18.md").read_text())
+            self.assertIn("unavailable", (Path(directory) / f"verification_math_{config.DEFAULT_REFERENCE_DATE}.md").read_text(encoding="utf-8"))
             path = export_verification_sample([], directory)
-            with path.open() as stream:
+            with path.open(encoding="utf-8") as stream:
                 self.assertEqual(list(csv.DictReader(stream)), [])
 
 

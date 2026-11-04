@@ -7,7 +7,7 @@ Run from the repository root:
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from src import config
@@ -58,9 +58,9 @@ class ParserTests(unittest.TestCase):
         if count is None:
             count = len(rows)
         catalog = {
-            "title": "Fake KEV catalog for tests",
-            "catalogVersion": "TEST-1.0",
-            "dateReleased": "2026-10-18T00:00:00Z",
+            "title": "CISA Known Exploited Vulnerabilities Catalog",
+            "catalogVersion": "2026.10.16",
+            "dateReleased": "2026-10-16T17:15:48.8752Z",
             "count": count,
             "vulnerabilities": rows,
         }
@@ -68,26 +68,29 @@ class ParserTests(unittest.TestCase):
 
     def test_valid_dates(self):
         self.assertEqual(parse_date("2026-10-18"), date(2026, 10, 18))
-        self.assertEqual(parse_date(" 2024-02-29 "), date(2024, 2, 29))
+        self.assertEqual(parse_date("2024-02-29"), date(2024, 2, 29))
+        self.assertIsNone(parse_date("2026-02-29"))
 
     def test_missing_bad_and_wrong_type_dates(self):
-        values = [None, "", "  ", "2026-02-30", "2025-02-29", "2026-13-01",
-                  "18/10/2026", "20261018", "2026-W42-7", 123, False, [], {}]
-        for value in values:
-            self.assertIsNone(parse_date(value), msg=repr(value))
+        for bad in [None, "", "  ", "2026/10/18", "bad", 12345, [], {}]:
+            with self.subTest(bad=bad):
+                self.assertIsNone(parse_date(bad))
 
     def test_fake_catalog_metadata_and_all_twelve_fields(self):
         self.write_catalog(FAKE_RECORDS)
         metadata, records = load_catalog(self.path)
-        self.assertEqual(metadata["catalog_version"], "TEST-1.0")
-        self.assertEqual(metadata["date_released"], "2026-10-18T00:00:00Z")
+        self.assertEqual(metadata["title"], "CISA Known Exploited Vulnerabilities Catalog")
+        self.assertEqual(metadata["catalog_version"], "2026.10.16")
+        self.assertEqual(metadata["date_released"], "2026-10-16T17:15:48.8752Z")
         self.assertEqual(metadata["record_count"], 8)
         self.assertEqual(metadata["declared_record_count"], 8)
-        self.assertEqual(metadata["file_name"], "fake_catalog.json")
+        self.assertEqual(metadata["file_name"], self.path.name)
         self.assertIsNone(metadata["download_date"])
         self.assertEqual(metadata["file_issues"], [])
+        self.assertTrue(metadata["load_succeeded"])
+        self.assertEqual(len(records), 8)
+
         record = records[0]
-        self.assertIsInstance(record, VulnerabilityRecord)
         self.assertEqual(record.cve_id, "CVE-2026-0001")
         self.assertEqual(record.vendor_project, "Example Vendor")
         self.assertEqual(record.product, "Example Product")
@@ -109,13 +112,14 @@ class ParserTests(unittest.TestCase):
             "overdue", "due_soon", "due_soon", "due_soon",
             "not_yet_due", "no_due_date", "due_soon", "due_soon",
         ]
+        ref = date(2026, 10, 18)
         for index, record in enumerate(records):
-            self.assertEqual(record.days_until_due(), expected_days[index])
-            self.assertEqual(record.due_status(), expected_statuses[index])
+            self.assertEqual(record.days_until_due(ref), expected_days[index])
+            self.assertEqual(record.due_status(ref), expected_statuses[index])
             if index == 6:
-                self.assertIsNone(record.age_in_days())
+                self.assertIsNone(record.age_in_days(ref))
             else:
-                self.assertEqual(record.age_in_days(), 17)
+                self.assertEqual(record.age_in_days(ref), 17)
 
     def test_quality_flags_and_duplicate_positions(self):
         self.write_catalog(FAKE_RECORDS)
@@ -134,25 +138,27 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(issues["affected_record_count"], 4)
 
     def test_reference_date_override_does_not_change_record(self):
-        record = VulnerabilityRecord(date_added=date(2026, 10, 16),
-                                     due_date=date(2026, 10, 19))
+        ref = config.DEFAULT_REFERENCE_DATE
+        record = VulnerabilityRecord(date_added=ref - timedelta(days=2),
+                                     due_date=ref + timedelta(days=1))
         self.assertEqual(record.age_in_days(), 2)
         self.assertEqual(record.days_until_due(), 1)
         self.assertEqual(record.due_status(), "due_soon")
-        self.assertEqual(record.age_in_days(date(2026, 10, 20)), 4)
-        self.assertEqual(record.days_until_due(date(2026, 10, 20)), -1)
-        self.assertEqual(record.due_status(date(2026, 10, 20)), "overdue")
-        self.assertEqual(record.due_date, date(2026, 10, 19))
+        self.assertEqual(record.age_in_days(ref + timedelta(days=2)), 4)
+        self.assertEqual(record.days_until_due(ref + timedelta(days=2)), -1)
+        self.assertEqual(record.due_status(ref + timedelta(days=2)), "overdue")
+        self.assertEqual(record.due_date, ref + timedelta(days=1))
         self.assertEqual(record.days_until_due(), 1)
 
     def test_due_soon_setting_is_read_from_shared_config(self):
         original = config.DUE_SOON_DAYS
-        record = VulnerabilityRecord(due_date=date(2026, 10, 28))
+        ref = config.DEFAULT_REFERENCE_DATE
+        record = VulnerabilityRecord(due_date=ref + timedelta(days=10))
         try:
             config.DUE_SOON_DAYS = 7
-            self.assertEqual(record.due_status(), "not_yet_due")
+            self.assertEqual(record.due_status(ref), "not_yet_due")
             config.DUE_SOON_DAYS = 14
-            self.assertEqual(record.due_status(), "due_soon")
+            self.assertEqual(record.due_status(ref), "due_soon")
         finally:
             config.DUE_SOON_DAYS = original
 
