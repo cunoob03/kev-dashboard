@@ -1,12 +1,40 @@
-# KEV Prioritization Dashboard
+# 🛡️ CISA KEV Prioritization Dashboard
 
-A reproducible command-line dashboard for analyzing CISA's Known Exploited
-Vulnerabilities (KEV) catalog. It reads a frozen local catalog snapshot and
-creates a report, a prioritized remediation worklist, and four charts. The
-project is defensive catalog analysis only: it does not scan systems, exploit
-vulnerabilities, or contact remote services during normal use.
+> **Deterministic, auditable vulnerability prioritization for CISA's Known Exploited Vulnerabilities catalog.**
 
-## Project at a glance
+![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![License MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.38%2B-FF4B4B?logo=streamlit&logoColor=white)
+![CISA KEV](https://img.shields.io/badge/CISA-KEV%20Catalog-0071BC)
+
+---
+
+## 📑 Table of Contents
+
+- [Overview](#overview)
+- [Features](#-features)
+- [Quick Start](#-quick-start)
+- [Run the Dashboard](#-run-the-dashboard)
+- [CLI Examples](#-cli-examples)
+- [Project Structure](#-project-structure)
+- [Prioritization Policy](#-prioritization-policy)
+- [Data Quality & Interpretation](#-data-quality--interpretation)
+- [Testing & Verification](#-testing--verification)
+- [Team Credits](#-team-credits)
+- [Scope & Safety Boundary](#-scope--safety-boundary)
+- [License](#-license)
+
+---
+
+## Overview
+
+A reproducible command-line and interactive web dashboard for analyzing CISA's
+[Known Exploited Vulnerabilities (KEV)](https://www.cisa.gov/known-exploited-vulnerabilities-catalog)
+catalog. It reads a frozen local catalog snapshot and creates a prioritized
+remediation worklist, a provenance report, and four analytical charts.
+
+This project is **defensive catalog analysis only** — it does not scan systems,
+exploit vulnerabilities, or contact remote services during normal use.
 
 | Item | Value |
 | --- | --- |
@@ -16,51 +44,85 @@ vulnerabilities, or contact remote services during normal use.
 | Download date | `2026-11-04` |
 | Frozen reference date | `2026-11-04` |
 | Records in snapshot | 1,767 |
-| Supported Python | 3.11+ |
 
-Snapshot integrity (SHA-256):
+<details>
+<summary>Snapshot Integrity (SHA-256)</summary>
 
 ```text
 b6e27975f6635ecfc546fbd4fd6e444ba63a07ab2abc8876229d77fe083d357d
 ```
 
-The frozen input makes results reproducible for grading. Changing the reference
-date recalculates date arithmetic; it does not download a newer catalog or
-reconstruct historical catalog membership.
+</details>
 
-## Features
+---
 
-- Parses the local KEV JSON catalog into `VulnerabilityRecord` objects.
-- Validates required fields, dates, malformed rows, and duplicate CVE IDs while
-  retaining damaged source rows for transparent reporting.
-- Calculates catalog age, days until due, and four deadline states.
-- Filters by vendor, product, ransomware-use value, deadline state, and
-  inclusive `date_added` range; filters combine with AND.
-- Exports an overdue-first CSV worklist using documented, deterministic sorting.
-- Produces vendor/product summaries, a text report, and four PNG charts.
-- Includes automated tests and a repeatable 30-record date-calculation worksheet.
+## ✨ Features
 
-## Requirements and installation
+- 🔍 **Parses** the local KEV JSON catalog into `VulnerabilityRecord` objects
+- ✅ **Validates** required fields, dates, malformed rows, and duplicate CVE IDs — retaining damaged rows for transparent reporting
+- 📅 **Calculates** catalog age, days until due, and four deadline states
+- 🔎 **Filters** by vendor, product, ransomware-use value, deadline state, and inclusive `date_added` range (AND logic)
+- 📤 **Exports** an overdue-first CSV worklist with documented, deterministic sorting
+- 📊 **Produces** vendor/product summaries, a text report, and four PNG charts
+- 🌐 **Interactive Streamlit Dashboard** with dark cybersecurity theme, live CISA feed toggle, and one-click exports
+- 🧪 **Automated tests** and a repeatable 30-record date-calculation verification worksheet
 
-Use Python 3.11 or later. From the repository root:
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python **3.11** or later
+- pip (included with Python)
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/cunoob03/kev-dashboard.git
+cd kev-dashboard
+
+# Create and activate virtual environment
 python -m venv .venv
+
+# Linux / macOS
 source .venv/bin/activate
+
+# Windows
+.venv\Scripts\activate
+
+# Install dependencies
 python -m pip install -r requirements.txt
-python -m src.dashboard
 ```
 
-On Windows, activate with `.venv\Scripts\activate`. Charts use Matplotlib's
-headless Agg backend. On hosts with a read-only home directory, configure
-writable caches before running:
+> **Note:** Charts use Matplotlib's headless Agg backend. On hosts with a
+> read-only home directory, configure writable caches before running:
+> ```bash
+> export MPLCONFIGDIR="$PWD/.cache/matplotlib"
+> export XDG_CACHE_HOME="$PWD/.cache"
+> ```
+
+---
+
+## 🖥️ Run the Dashboard
+
+### Interactive Web Application (Streamlit)
 
 ```bash
-export MPLCONFIGDIR="$PWD/.cache/matplotlib"
-export XDG_CACHE_HOME="$PWD/.cache"
+streamlit run app.py
 ```
 
-## Run the dashboard
+The web application provides:
+
+- **Dual-Mode Ingestion** — Frozen snapshot by default for 100% reproducible grading, with optional live CISA feed fetch
+- **KPI Metrics Cards** — Overdue, Due Soon, Ransomware Known, and Catalog Age
+- **Interactive Worklist** — Searchable, multi-column filterable table with color-coded deadline badges
+- **CVE Inspector** — Deep-dive into CISA's required action mandates, remediation notes, and CWE tags
+- **Visual Analytics** — Dark-themed responsive charts with educational "Counts ≠ Risk" disclosures
+- **One-Click Export** — Download the prioritized worklist as CSV or JSON
+
+### Command-Line Interface
 
 ```bash
 python -m src.dashboard
@@ -77,34 +139,16 @@ The command prints the report and creates these files in `outputs/`:
 | `plot_monthly_trend.png` | Catalog additions per month, including zero-count months |
 | `plot_ransomware_by_vendor.png` | Known versus Unknown ransomware-use values for top vendors |
 
-The CSV begins with a `#` provenance line. Skip that line when reading it with
-`csv.DictReader` or importing it into a spreadsheet. Re-running into the same
-directory replaces generated files; use `--output-dir` to retain a selection.
+---
 
-## Run the interactive web application
-
-You can launch the modern Streamlit web dashboard in your browser:
-
-```bash
-streamlit run app.py
-```
-
-The web application provides:
-- **Dual-Mode Ingestion**: Loads the local frozen snapshot by default for 100% reproducible grading, with an optional one-click button to fetch the live CISA KEV feed.
-- **KPI Metrics Cards**: Overdue, Due Soon, Ransomware Known, and Catalog Age.
-- **Interactive Worklist**: Searchable, multi-column filterable table with color-coded deadline badges.
-- **CVE Inspector**: Deep-dive into CISA's required action mandates, remediation notes, and CWE tags.
-- **Visual Analytics**: Interactive responsive charts and "Counts != Risk" educational disclosures.
-- **One-Click Export**: Download the prioritized worklist as CSV or JSON.
-
-### Useful CLI examples
+## 💻 CLI Examples
 
 ```bash
 # Exact, case-insensitive vendor or product filters
 python -m src.dashboard --vendor Microsoft --output-dir outputs/microsoft
 python -m src.dashboard --product Windows --output-dir outputs/windows
 
-# Filters combine with AND
+# Combine filters with AND logic
 python -m src.dashboard --product Windows --ransomware Known \
   --due-status overdue --output-dir outputs/windows-overdue
 
@@ -112,11 +156,13 @@ python -m src.dashboard --product Windows --ransomware Known \
 python -m src.dashboard --start-date 2026-01-01 --end-date 2026-11-04 \
   --output-dir outputs/recent
 
-# Recalculate without changing the frozen input snapshot
+# Recalculate with a different reference date
 python -m src.dashboard --reference-date 2026-10-20 --output-dir outputs/2026-10-20
 
 # Select records without a usable catalog due date
 python -m src.dashboard --due-status no_due_date --output-dir outputs/missing-dates
+
+# Full help
 python -m src.dashboard --help
 ```
 
@@ -124,42 +170,93 @@ To analyze another local JSON file, pass `--catalog path/to/catalog.json`. Use
 `--download-date YYYY-MM-DD` only when that provenance is known; otherwise the
 report deliberately shows `Unknown` rather than guessing from file metadata.
 
-## Prioritization policy
+---
 
-The worklist uses no invented severity, CVSS, or organization-specific risk
-score. Its ordering is intentionally simple and auditable:
+## 📁 Project Structure
 
-1. Overdue records first, with the most overdue deadline first.
-2. Other records with a valid deadline next, earliest due date first.
-3. Records without a usable due date last.
-4. Ties use the oldest `date_added` first; fully tied records retain source order.
+```text
+kev-dashboard/
+├── .streamlit/
+│   └── config.toml          # Streamlit dark theme configuration
+├── data/
+│   └── known_exploited_vulnerabilities_2026-11-04.json
+├── docs/
+│   ├── interface_contract.md
+│   ├── prioritization_rules.md
+│   ├── presentation_playbook.md
+│   ├── validation.md
+│   └── team_handoff_*.txt
+├── outputs/                  # Generated reports, worklists, plots, verification
+├── src/
+│   ├── __init__.py
+│   ├── config.py             # Shared settings (dates, paths, thresholds)
+│   ├── constants.py          # Output names and CSV column definitions
+│   ├── counters.py           # Dictionary tallies and NumPy summaries
+│   ├── dashboard.py          # CLI report generator
+│   ├── export.py             # CSV export with provenance header
+│   ├── filters.py            # Non-mutating record filters
+│   ├── models.py             # VulnerabilityRecord data model
+│   ├── parser.py             # JSON catalog parser and validator
+│   ├── plots.py              # Four headless Matplotlib charts
+│   ├── prioritizer.py        # Deterministic priority ordering
+│   ├── sample_check.py       # Reproducible sample for manual review
+│   ├── sampling.py           # Shared source-row sampling logic
+│   ├── test_data.py          # Fake records for test suite
+│   └── verification.py       # Date-calculation verification worksheet
+├── tests/
+│   ├── test_parser.py        # Parser, date math, and validation tests
+│   └── test_dashboard.py     # Filters, worklist, counters, and integration tests
+├── app.py                    # Streamlit interactive web dashboard
+├── requirements.txt
+├── LICENSE
+└── README.md
+```
+
+---
+
+## 📐 Prioritization Policy
+
+The worklist uses **no invented severity, CVSS, or organization-specific risk
+score**. Its ordering is intentionally simple and auditable:
+
+1. **Overdue records first**, with the most overdue deadline first
+2. **Other records with a valid deadline next**, earliest due date first
+3. **Records without a usable due date last**
+4. **Ties**: oldest `date_added` first; fully tied records retain source order
 
 With the default configuration, **due soon** means from today through 14 days
-ahead, inclusive. Due today is due soon, not overdue. Update
-`DUE_SOON_DAYS` in `src/config.py` only when the team agrees to change this
-project-wide policy. See [the full prioritization rules](docs/prioritization_rules.md).
+ahead, inclusive. Due today is due soon, not overdue. Update `DUE_SOON_DAYS` in
+`src/config.py` only when the team agrees to change this project-wide policy.
 
-## Data quality and interpretation
+See [the full prioritization rules](docs/prioritization_rules.md).
 
-The dashboard checks data quality against the full catalog before filtering, so
-a filter cannot hide malformed or duplicate source records. Missing or invalid
+---
+
+## 🔬 Data Quality & Interpretation
+
+The dashboard checks data quality against the **full catalog before filtering**,
+so a filter cannot hide malformed or duplicate source records. Missing or invalid
 values become `None`, are retained in the report, and appear in explicit
 missing-value buckets where appropriate.
 
-- A vendor or product count measures catalog presence, not vendor security or
-  an organization's exposure.
-- `Unknown` ransomware use means unconfirmed—not confirmed absence.
-- `Overdue` describes CISA's catalog deadline; it does not prove a particular
-  organization has not remediated the issue.
-- Monthly additions show catalog addition dates, not first-exploitation dates.
-- The bundled catalog supplies no numeric severity score, so this project does
-  not invent one.
+- A vendor or product count measures **catalog presence**, not vendor security or an organization's exposure
+- `Unknown` ransomware use means **unconfirmed** — not confirmed absence
+- `Overdue` describes CISA's catalog deadline; it does not prove a particular organization has not remediated the issue
+- Monthly additions show **catalog addition dates**, not first-exploitation dates
+- The bundled catalog supplies no numeric severity score, so this project does not invent one
 
-## Test and verification workflow
+---
+
+## 🧪 Testing & Verification
 
 ```bash
+# Run full test suite
 python -m unittest discover -s tests -v
+
+# Print reproducible sample for manual review
 python -m src.sample_check
+
+# Generate verification worksheet
 python -m src.verification
 ```
 
@@ -171,37 +268,33 @@ tools consistently select 30 distinct source rows using seed 42 and create:
 - `outputs/verification_sample_2026-11-04.csv`
 - `outputs/verification_math_2026-11-04.md`
 
-The worksheet independently checks age, due offsets, overdue flags, and all
-four deadline states. It supports—but does not replace—the required human
-manual review of sampled source rows. See [validation notes](docs/validation.md).
+See [validation notes](docs/validation.md) and
+[interface contract](docs/interface_contract.md) for details.
 
-## Project structure
+---
 
-```text
-data/       Frozen CISA KEV catalog snapshot
-docs/       Rules, validation notes, interface contract, and team handoffs
-outputs/    Reproducible report, worklist, plots, and verification artifacts
-src/        Parser, record model, filtering, prioritization, exports, and CLI
-tests/      Unit and integration tests
-```
+## 👥 Team Credits
 
-The parser and dashboard share one record model and date policy:
+| Contributor | Email | Responsibilities |
+| --- | --- | --- |
+| **Duy** | cunoob02@gmail.com | Dashboard & Prioritization |
+| **Khoa Anh** | anhkhoa2052006@gmail.com | Parser & Date Logic |
+| **phanharany** | phanharany@gmail.com | Catalog Setup & Version Management |
+| **Phucxo1xx** | 87871427+Phucxo1xx@users.noreply.github.com | Validation & Documentation |
 
-```python
-from src.parser import load_catalog
-from src.dashboard import generate_dashboard
-
-catalog_info, records = load_catalog()
-report_path = generate_dashboard(records, catalog_info, vendor_filter="Microsoft")
-```
-
-For the integration contract, see [docs/interface_contract.md](docs/interface_contract.md).
 For teammate ownership and maintenance notes, see:
-
 - [Dashboard and prioritization handoff](docs/team_handoff_duy_dashboard_prioritization.txt)
 - [Parser and date-logic handoff](docs/team_handoff_khoa_parser_date_logic.txt)
 
-## Scope and safety boundary
+---
 
-This project is a defensive analysis tool for an authoritative public catalog.
+## 🔒 Scope & Safety Boundary
+
+This project is a **defensive analysis tool** for an authoritative public catalog.
 It performs no exploit development, target scanning, or remote security testing.
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
