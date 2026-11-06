@@ -29,6 +29,17 @@ from src.plots import (
 )
 from src.prioritizer import PrioritizedWorklist
 
+# -- Semantic Color Palette ---------------------------------------------------
+COLOR_BG_PRIMARY = "#0D1117"
+COLOR_BG_CARD = "#161B22"
+COLOR_TEXT = "#E6EDF3"
+COLOR_TEXT_SECONDARY = "#8B949E"
+COLOR_OVERDUE = "#BF4545"
+COLOR_DUE_SOON = "#DD982D"
+COLOR_SAFE = "#438B69"
+COLOR_PRIMARY = "#3979A6"
+COLOR_BORDER_GLOW = "rgba(57, 121, 166, 0.3)"
+
 # -----------------------------------------------------------------------------
 # Streamlit Page Config
 # -----------------------------------------------------------------------------
@@ -39,34 +50,130 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom Styling (Midnight Navy / Slate Blue / Crisp Cards)
+# -- Dark Cybersecurity Theme CSS ----------------------------------------------
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #F6F8FB;
-        border: 1px solid #D8E0EB;
-        border-radius: 8px;
-        padding: 14px 18px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    /* Import Montserrat from Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+
+    /* Global typography */
+    html, body, [class*="st-"], .stApp {
+        font-family: 'Montserrat', 'Segoe UI', sans-serif;
     }
+
+    /* Main app background */
+    .stApp {
+        background-color: #0D1117;
+        color: #E6EDF3;
+    }
+
+    /* Glass-morphism metric cards with blue border glow */
+    .metric-card {
+        background: linear-gradient(135deg, #161B22 0%, #1C2333 100%);
+        border: 1px solid rgba(57, 121, 166, 0.3);
+        border-radius: 10px;
+        padding: 18px 22px;
+        box-shadow: 0 0 15px rgba(57, 121, 166, 0.08),
+                    0 4px 12px rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(8px);
+        transition: border-color 0.2s ease;
+    }
+    .metric-card:hover {
+        border-color: rgba(57, 121, 166, 0.6);
+    }
+
+    /* Semantic status badges */
     .badge-overdue {
         color: #BF4545;
-        font-weight: bold;
+        font-weight: 700;
+        text-shadow: 0 0 6px rgba(191, 69, 69, 0.3);
     }
     .badge-due-soon {
         color: #DD982D;
-        font-weight: bold;
+        font-weight: 700;
+        text-shadow: 0 0 6px rgba(221, 152, 45, 0.3);
     }
     .badge-safe {
         color: #438B69;
-        font-weight: bold;
+        font-weight: 700;
+        text-shadow: 0 0 6px rgba(67, 139, 105, 0.3);
     }
+
+    /* Dark-styled tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
+        gap: 4px;
+        background-color: #161B22;
+        border-radius: 8px;
+        padding: 4px;
     }
     .stTabs [data-baseweb="tab"] {
-        padding: 10px 20px;
+        padding: 12px 24px;
         font-weight: 600;
+        color: #8B949E;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #E6EDF3;
+        background-color: rgba(57, 121, 166, 0.1);
+    }
+    .stTabs [aria-selected="true"] {
+        color: #E6EDF3 !important;
+        background-color: rgba(57, 121, 166, 0.2) !important;
+        border-bottom: 2px solid #3979A6 !important;
+    }
+
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0D1117;
+        border-right: 1px solid rgba(57, 121, 166, 0.15);
+    }
+
+    /* Streamlit metric overrides for dark theme */
+    [data-testid="stMetricValue"] {
+        color: #E6EDF3;
+    }
+    [data-testid="stMetricDelta"] {
+        color: #8B949E;
+    }
+
+    /* Dataframe / table styling */
+    .stDataFrame {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    /* Input elements */
+    .stSelectbox label, .stMultiSelect label, .stDateInput label,
+    .stTextInput label, .stSlider label {
+        color: #8B949E !important;
+        font-weight: 500;
+    }
+
+    /* Divider lines */
+    hr {
+        border-color: rgba(57, 121, 166, 0.15);
+    }
+
+    /* Caption text */
+    .stCaption {
+        color: #8B949E;
+    }
+
+    /* Better scrollbar for dark mode */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0D1117;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #30363D;
+        border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #3979A6;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -286,6 +393,24 @@ with kpi5:
 
 st.markdown("---")
 
+
+# -- Chart Styling Helper ------------------------------------------------------
+def apply_dark_chart_style(fig, ax, title_text=""):
+    """Apply consistent dark theme to matplotlib figures in the dashboard."""
+    fig.set_facecolor(COLOR_BG_CARD)
+    ax.set_facecolor(COLOR_BG_CARD)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.spines["bottom"].set_color(COLOR_TEXT_SECONDARY)
+    ax.spines["left"].set_color(COLOR_TEXT_SECONDARY)
+    ax.tick_params(colors=COLOR_TEXT_SECONDARY, which="both")
+    ax.xaxis.label.set_color(COLOR_TEXT_SECONDARY)
+    ax.yaxis.label.set_color(COLOR_TEXT_SECONDARY)
+    ax.grid(axis="y", color="#30363D", alpha=0.4, linewidth=0.5)
+    ax.set_axisbelow(True)
+    if title_text:
+        ax.set_title(title_text, fontweight="bold", loc="left", color=COLOR_TEXT, fontsize=12)
+
+
 # -----------------------------------------------------------------------------
 # Tabbed Navigation
 # -----------------------------------------------------------------------------
@@ -402,16 +527,14 @@ with tab_charts:
     with chart_col1:
         st.markdown("##### 1. Deadlines at Reference Date")
         fig1, ax1 = plt.subplots(figsize=(8, 5))
-        fig1.set_facecolor("#f6f8fb")
-        ax1.set_facecolor("#f6f8fb")
+        apply_dark_chart_style(fig1, ax1, f"Status at {reference_date}")
         counts = [stats["overdue_count"], stats["due_soon_count"], stats["not_yet_due_count"]]
         labels = ["Overdue (<0d)", f"Due Soon (0–{due_soon_window}d)", f"Not Yet Due (>{due_soon_window}d)"]
-        colors = ["#bf4545", "#dd982d", "#438b69"]
-        bars = ax1.bar(labels, counts, color=colors)
-        ax1.bar_label(bars, padding=3)
-        ax1.spines[["top", "right"]].set_visible(False)
-        ax1.set_ylabel("Records")
-        ax1.set_title(f"Status at {reference_date}", fontweight="bold", loc="left")
+        colors = [COLOR_OVERDUE, COLOR_DUE_SOON, COLOR_SAFE]
+        bars = ax1.bar(labels, counts, color=colors, edgecolor="#0D1117", linewidth=0.5)
+        ax1.bar_label(bars, padding=3, color=COLOR_TEXT, fontweight="bold")
+        ax1.set_ylabel("Records", color=COLOR_TEXT_SECONDARY)
+        ax1.tick_params(axis="x", colors=COLOR_TEXT_SECONDARY)
         fig1.tight_layout()
         st.pyplot(fig1)
         plt.close(fig1)
@@ -420,17 +543,15 @@ with tab_charts:
         st.markdown("##### 2. Top 10 Vendors by Catalog Presence")
         vendors = count_by_vendor(selected)
         fig2, ax2 = plt.subplots(figsize=(8, 5))
-        fig2.set_facecolor("#f6f8fb")
-        ax2.set_facecolor("#f6f8fb")
+        apply_dark_chart_style(fig2, ax2, "Top Vendors (Counts != Risk)")
         top_items = sorted(vendors.items(), key=lambda item: (-item[1], item[0]))[:10]
         if top_items:
             names, counts_v = zip(*top_items)
-            bars2 = ax2.barh(names, counts_v, color="#3979a6")
-            ax2.bar_label(bars2, padding=3)
+            bars2 = ax2.barh(names, counts_v, color=COLOR_PRIMARY, edgecolor="#0D1117", linewidth=0.5)
+            ax2.bar_label(bars2, padding=3, color=COLOR_TEXT, fontweight="bold")
             ax2.invert_yaxis()
-            ax2.spines[["top", "right"]].set_visible(False)
-            ax2.set_xlabel("Vulnerabilities")
-            ax2.set_title("Top Vendors (Counts != Risk)", fontweight="bold", loc="left")
+            ax2.set_xlabel("Vulnerabilities", color=COLOR_TEXT_SECONDARY)
+            ax2.tick_params(axis="y", colors=COLOR_TEXT_SECONDARY)
         fig2.tight_layout()
         st.pyplot(fig2)
         plt.close(fig2)
@@ -440,8 +561,7 @@ with tab_charts:
     with chart_col3:
         st.markdown("##### 3. Monthly Addition Trend")
         fig3, ax3 = plt.subplots(figsize=(8, 5))
-        fig3.set_facecolor("#f6f8fb")
-        ax3.set_facecolor("#f6f8fb")
+        apply_dark_chart_style(fig3, ax3, "KEV Additions by Month")
         dated_records = [r for r in selected if r.date_added]
         if dated_records:
             monthly_counts = {}
@@ -449,12 +569,20 @@ with tab_charts:
                 month_key = r.date_added.strftime("%Y-%m")
                 monthly_counts[month_key] = monthly_counts.get(month_key, 0) + 1
             sorted_months = sorted(monthly_counts.keys())
-            ax3.plot(sorted_months, [monthly_counts[m] for m in sorted_months], marker="o", color="#3979a6", linewidth=2)
-            ax3.spines[["top", "right"]].set_visible(False)
-            ax3.set_xticks(range(0, len(sorted_months), max(1, len(sorted_months)//6)))
-            ax3.tick_params(axis='x', rotation=35)
-            ax3.set_ylabel("Additions")
-            ax3.set_title("KEV Additions by Month", fontweight="bold", loc="left")
+            ax3.plot(
+                sorted_months,
+                [monthly_counts[m] for m in sorted_months],
+                marker="o", color=COLOR_PRIMARY, linewidth=2,
+                markerfacecolor=COLOR_TEXT, markeredgecolor=COLOR_PRIMARY, markersize=5,
+            )
+            ax3.fill_between(
+                sorted_months,
+                [monthly_counts[m] for m in sorted_months],
+                alpha=0.1, color=COLOR_PRIMARY,
+            )
+            ax3.set_xticks(range(0, len(sorted_months), max(1, len(sorted_months) // 6)))
+            ax3.tick_params(axis="x", rotation=35, colors=COLOR_TEXT_SECONDARY)
+            ax3.set_ylabel("Additions", color=COLOR_TEXT_SECONDARY)
         fig3.tight_layout()
         st.pyplot(fig3)
         plt.close(fig3)
@@ -462,15 +590,18 @@ with tab_charts:
     with chart_col4:
         st.markdown("##### 4. Known vs Unknown Ransomware Use")
         fig4, ax4 = plt.subplots(figsize=(8, 5))
-        fig4.set_facecolor("#f6f8fb")
-        ax4.set_facecolor("#f6f8fb")
+        apply_dark_chart_style(fig4, ax4, "Ransomware Associations")
         rw_known = sum(1 for r in selected if r.known_ransomware_campaign_use == "Known")
         rw_unknown = sum(1 for r in selected if r.known_ransomware_campaign_use == "Unknown")
-        rw_bars = ax4.bar(["Known Campaign Use", "Unknown / Unconfirmed"], [rw_known, rw_unknown], color=["#bf4545", "#3979a6"])
-        ax4.bar_label(rw_bars, padding=3)
-        ax4.spines[["top", "right"]].set_visible(False)
-        ax4.set_ylabel("Records")
-        ax4.set_title("Ransomware Associations", fontweight="bold", loc="left")
+        rw_bars = ax4.bar(
+            ["Known Campaign Use", "Unknown / Unconfirmed"],
+            [rw_known, rw_unknown],
+            color=[COLOR_OVERDUE, COLOR_PRIMARY],
+            edgecolor="#0D1117", linewidth=0.5,
+        )
+        ax4.bar_label(rw_bars, padding=3, color=COLOR_TEXT, fontweight="bold")
+        ax4.set_ylabel("Records", color=COLOR_TEXT_SECONDARY)
+        ax4.tick_params(axis="x", colors=COLOR_TEXT_SECONDARY)
         fig4.tight_layout()
         st.pyplot(fig4)
         plt.close(fig4)
