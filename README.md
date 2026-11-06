@@ -107,20 +107,26 @@ python -m pip install -r requirements.txt
 
 ## 🖥️ Run the Dashboard
 
-### Interactive Web Application (Streamlit)
+### Interactive Web Application (Streamlit Cyber-HUD)
 
 ```bash
 streamlit run app.py
 ```
 
-The web application provides:
+The web application delivers an authentic **Cyber-HUD** defensive interface matching the team's presentation deck (*Black Sci Fi Computer Technology Presentation*):
 
-- **Dual-Mode Ingestion** — Frozen snapshot by default for 100% reproducible grading, with optional live CISA feed fetch
-- **KPI Metrics Cards** — Overdue, Due Soon, Ransomware Known, and Catalog Age
-- **Interactive Worklist** — Searchable, multi-column filterable table with color-coded deadline badges
-- **CVE Inspector** — Deep-dive into CISA's required action mandates, remediation notes, and CWE tags
-- **Visual Analytics** — Dark-themed responsive charts with educational "Counts ≠ Risk" disclosures
-- **One-Click Export** — Download the prioritized worklist as CSV or JSON
+- **Quick-Triage Action Bar** — 1-click presets for immediate operational triage:
+  - `[ ALL VULNERABILITIES ]` — Complete catalog reset
+  - `[ URGENT REMEDIATION ]` — Breached federal compliance deadlines (Overdue)
+  - `[ RANSOMWARE CAMPAIGNS ]` — Documented ransomware syndicate weaponization
+  - `[ MAJOR TECH PLATFORMS ]` — Enterprise tier platforms (Microsoft, Apple, Cisco, Google, Adobe)
+- **Executive Risk Explainer Card** — Translates technical compliance metrics into plain English business context under CISA Binding Operational Directive (BOD) 22-01
+- **Cleaned Control Architecture** — High-level search and filters visible on load, with deep date-math dials organized in an expandable `[ ADVANCED AUDIT & DATE CONTROLS ]` drawer
+- **Chamfered Cyber Frames** — Cut-corner geometric styling (`clip-path`) with crisp high-contrast borders and telemetry bracket notation (`[SYS.ACTIVE]`, `[MANDATE: OVERDUE]`, `[THREAT: RANSOMWARE]`, `[STATUS: VERIFIED]`, `[LIVE FEED]`)
+- **Dual-Mode Ingestion** — Frozen snapshot by default for 100% reproducible grading, with optional live CISA feed sync
+- **Visual Analytics** — 150 DPI Cyber-HUD Matplotlib telemetry charts with `#070A0F` background, crisp white spines, and educational *"Counts ≠ Risk"* disclosures
+- **CVE Inspector** — Deep telemetry inspection of CISA binding remediation mandates, advisories, and CWE classifications
+- **One-Click Export** — Download auditable prioritized worklists as CSV (with provenance header) or JSON
 
 ### Command-Line Interface
 
@@ -270,6 +276,17 @@ tools consistently select 30 distinct source rows using seed 42 and create:
 
 See [validation notes](docs/validation.md) and
 [interface contract](docs/interface_contract.md) for details.
+
+---
+
+## 🌿 Git Branches & Versions
+
+| Branch | Release | Description |
+| --- | --- | --- |
+| `main` | **v3.0** | Production release featuring the authentic Cyber-HUD interface, quick-triage bar, and executive explainer |
+| `v3.0-cyber-hud` | **v3.0-dev** | Feature branch for the Cyber-HUD UI modernization matching the Canva presentation deck |
+| `v2.0-dark` | **v2.0** | Preserved release with the initial dark cybersecurity theme (`5e44114`) |
+| `v1.0-light` | **v1.0** | Baseline release with crisp light theme optimized for classroom projection |
 
 ---
 

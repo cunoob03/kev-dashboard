@@ -1,18 +1,22 @@
 """
-CISA KEV Prioritization Dashboard & Remediation Hub
-Interactive Streamlit Web Application for Defensive Vulnerability Prioritization.
+CISA KEV Prioritization Dashboard & Tactical Remediation Hub
+Authentic Cyber-HUD Interface for Defensive Vulnerability Prioritization & Audit.
+Matches Team Canva Deck: "Black Sci Fi Computer Technology Presentation"
 """
 
+import csv
+import io
 import json
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
-import io
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import pandas as pd
 import requests
 import streamlit as st
-import matplotlib.pyplot as plt
 
 from src import config
 from src.constants import PLOT_FILENAMES, WORKLIST_CSV_COLUMNS
@@ -29,151 +33,294 @@ from src.plots import (
 )
 from src.prioritizer import PrioritizedWorklist
 
-# -- Semantic Color Palette ---------------------------------------------------
-COLOR_BG_PRIMARY = "#0D1117"
-COLOR_BG_CARD = "#161B22"
-COLOR_TEXT = "#E6EDF3"
-COLOR_TEXT_SECONDARY = "#8B949E"
-COLOR_OVERDUE = "#BF4545"
-COLOR_DUE_SOON = "#DD982D"
-COLOR_SAFE = "#438B69"
-COLOR_PRIMARY = "#3979A6"
-COLOR_BORDER_GLOW = "rgba(57, 121, 166, 0.3)"
+# -- Cyber-HUD Telemetry Palette ----------------------------------------------
+COLOR_HUD_BG = "#070A0F"          # Pure deep cybernetic carbon
+COLOR_HUD_PANEL = "#0B0F17"       # Chamfered panel / surface
+COLOR_HUD_TEXT = "#FFFFFF"        # Pure high-contrast white
+COLOR_HUD_MUTED = "#94A3B8"       # Cold telemetry silver
+COLOR_HUD_CYAN = "#38BDF8"        # Electric cyan telemetry accent
+COLOR_HUD_RED = "#EF4444"         # Urgent mandate overdue crimson
+COLOR_HUD_AMBER = "#F59E0B"       # Approaching deadline warning
+COLOR_HUD_GREEN = "#10B981"       # Verified safe / passed telemetry
 
 # -----------------------------------------------------------------------------
 # Streamlit Page Config
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="CISA KEV Prioritization Hub",
-    page_icon="🛡️",
+    page_title="CISA KEV // DEFENSIVE HUD",
+    page_icon=":material/radar:",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# -- Dark Cybersecurity Theme CSS ----------------------------------------------
+# -- Cyber-HUD Global Theme CSS ------------------------------------------------
 st.markdown("""
 <style>
-    /* Import Montserrat from Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-    /* Global typography */
+    /* Global Typography & Font Smoothing */
     html, body, [class*="st-"], .stApp {
-        font-family: 'Montserrat', 'Segoe UI', sans-serif;
+        font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: #F1F5F9;
+        -webkit-font-smoothing: antialiased;
     }
 
-    /* Main app background */
+    /* Sci-Fi Deep Cybernetic Carbon Grid */
     .stApp {
-        background-color: #0D1117;
-        color: #E6EDF3;
+        background-color: #070A0F;
+        background-image: 
+            linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+            radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.07) 0%, transparent 65%);
+        background-size: 32px 32px, 32px 32px, 100% 100%;
+        background-position: 0 0, 0 0, 0 0;
     }
 
-    /* Glass-morphism metric cards with blue border glow */
-    .metric-card {
-        background: linear-gradient(135deg, #161B22 0%, #1C2333 100%);
-        border: 1px solid rgba(57, 121, 166, 0.3);
-        border-radius: 10px;
-        padding: 18px 22px;
-        box-shadow: 0 0 15px rgba(57, 121, 166, 0.08),
-                    0 4px 12px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(8px);
-        transition: border-color 0.2s ease;
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #070A0F !important;
+        border-right: 1.5px solid rgba(255, 255, 255, 0.15);
+        background-image: 
+            linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+        background-size: 24px 24px;
     }
-    .metric-card:hover {
-        border-color: rgba(57, 121, 166, 0.6);
+    section[data-testid="stSidebar"] > div {
+        background-color: transparent !important;
     }
 
-    /* Semantic status badges */
-    .badge-overdue {
-        color: #BF4545;
-        font-weight: 700;
-        text-shadow: 0 0 6px rgba(191, 69, 69, 0.3);
+    /* Chamfered Card Base Frame */
+    .hud-card {
+        background: #0B0F17;
+        border: 1.5px solid rgba(255, 255, 255, 0.28);
+        clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+        padding: 16px 20px;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 0 15px rgba(56, 189, 248, 0.03);
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    .badge-due-soon {
-        color: #DD982D;
-        font-weight: 700;
-        text-shadow: 0 0 6px rgba(221, 152, 45, 0.3);
+    .hud-card:hover {
+        border-color: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 0 25px rgba(56, 189, 248, 0.15), inset 0 0 16px rgba(56, 189, 248, 0.06);
     }
-    .badge-safe {
-        color: #438B69;
-        font-weight: 700;
-        text-shadow: 0 0 6px rgba(67, 139, 105, 0.3);
+    .hud-card-accent-red {
+        border-left: 3px solid #EF4444;
+    }
+    .hud-card-accent-cyan {
+        border-left: 3px solid #38BDF8;
+    }
+    .hud-card-accent-amber {
+        border-left: 3px solid #F59E0B;
+    }
+    .hud-card-accent-green {
+        border-left: 3px solid #10B981;
     }
 
-    /* Dark-styled tabs */
+    /* Chamfered KPI Metric Card */
+    .hud-kpi-card {
+        background: #0B0F17;
+        border: 1.5px solid rgba(255, 255, 255, 0.24);
+        clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+        padding: 14px 18px;
+        position: relative;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+        transition: all 0.2s ease;
+        margin-bottom: 8px;
+    }
+    .hud-kpi-card:hover {
+        border-color: rgba(56, 189, 248, 0.7);
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+    }
+    .hud-kpi-header {
+        font-size: 0.72rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #94A3B8;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+    .hud-kpi-value {
+        font-size: 1.85rem;
+        font-weight: 800;
+        color: #FFFFFF;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+        font-family: 'Montserrat', sans-serif;
+    }
+    .hud-kpi-delta {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #64748B;
+        font-family: 'JetBrains Mono', monospace;
+        margin-top: 6px;
+    }
+
+    /* Telemetry Brackets & Decals */
+    .hud-tag {
+        display: inline-block;
+        padding: 2px 7px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        font-family: 'JetBrains Mono', monospace;
+        text-transform: uppercase;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.04);
+    }
+    .hud-tag-cyan {
+        color: #38BDF8;
+        border-color: rgba(56, 189, 248, 0.5);
+        background: rgba(56, 189, 248, 0.1);
+    }
+    .hud-tag-red {
+        color: #EF4444;
+        border-color: rgba(239, 68, 68, 0.5);
+        background: rgba(239, 68, 68, 0.12);
+    }
+    .hud-tag-amber {
+        color: #F59E0B;
+        border-color: rgba(245, 158, 11, 0.5);
+        background: rgba(245, 158, 11, 0.12);
+    }
+    .hud-tag-green {
+        color: #10B981;
+        border-color: rgba(16, 185, 129, 0.5);
+        background: rgba(16, 185, 129, 0.12);
+    }
+    .hud-slash {
+        color: #38BDF8;
+        font-weight: 800;
+        margin-right: 4px;
+    }
+
+    /* Tabs - Cyber HUD Chamfered Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background-color: #161B22;
-        border-radius: 8px;
-        padding: 4px;
+        gap: 8px;
+        background-color: #070A0F;
+        border-bottom: 1.5px solid rgba(255, 255, 255, 0.2);
+        padding: 6px 0px;
     }
     .stTabs [data-baseweb="tab"] {
-        padding: 12px 24px;
-        font-weight: 600;
-        color: #8B949E;
-        border-radius: 6px;
+        background-color: #0B0F17;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 0px;
+        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        color: #94A3B8;
+        font-size: 0.8rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        padding: 10px 18px;
         transition: all 0.2s ease;
     }
     .stTabs [data-baseweb="tab"]:hover {
-        color: #E6EDF3;
-        background-color: rgba(57, 121, 166, 0.1);
+        color: #FFFFFF;
+        border-color: rgba(255, 255, 255, 0.5);
+        background-color: rgba(56, 189, 248, 0.08);
     }
     .stTabs [aria-selected="true"] {
-        color: #E6EDF3 !important;
-        background-color: rgba(57, 121, 166, 0.2) !important;
-        border-bottom: 2px solid #3979A6 !important;
+        color: #FFFFFF !important;
+        background-color: #0E1624 !important;
+        border: 1.5px solid #38BDF8 !important;
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.25) !important;
     }
 
-    /* Sidebar styling */
-    section[data-testid="stSidebar"] {
-        background-color: #0D1117;
-        border-right: 1px solid rgba(57, 121, 166, 0.15);
+    /* Streamlit Buttons - Chamfered & High-Contrast */
+    .stButton > button {
+        border-radius: 0px;
+        clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        font-weight: 700;
+        font-size: 0.78rem;
+        letter-spacing: 0.05em;
+        font-family: 'Montserrat', sans-serif;
+        border: 1.5px solid rgba(255, 255, 255, 0.3);
+        background-color: #0B0F17;
+        color: #E2E8F0;
+        padding: 8px 16px;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        border-color: #FFFFFF;
+        color: #FFFFFF;
+        background-color: rgba(56, 189, 248, 0.12);
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+    .stButton > button[kind="primary"], .stButton > button:active {
+        border-color: #38BDF8 !important;
+        background-color: #0A2540 !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 0 18px rgba(56, 189, 248, 0.45) !important;
     }
 
-    /* Streamlit metric overrides for dark theme */
-    [data-testid="stMetricValue"] {
-        color: #E6EDF3;
+    /* Form Inputs & Selects */
+    .stTextInput input, .stSelectbox [data-baseweb="select"], .stMultiSelect [data-baseweb="select"] {
+        background-color: #0B0F17 !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 0px !important;
+        color: #FFFFFF !important;
     }
-    [data-testid="stMetricDelta"] {
-        color: #8B949E;
+    .stSelectbox label, .stMultiSelect label, .stDateInput label, .stTextInput label, .stSlider label {
+        color: #CBD5E1 !important;
+        font-weight: 600 !important;
+        font-size: 0.78rem !important;
+        letter-spacing: 0.04em !important;
+        text-transform: uppercase;
     }
 
-    /* Dataframe / table styling */
+    /* Expanders */
+    div[data-testid="stExpander"] {
+        border: 1.5px solid rgba(255, 255, 255, 0.18) !important;
+        background-color: #080C14 !important;
+        border-radius: 0px !important;
+        margin-bottom: 12px;
+    }
+    .streamlit-expanderHeader {
+        background-color: #0B0F17 !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        font-size: 0.82rem !important;
+        letter-spacing: 0.04em !important;
+    }
+
+    /* Dataframe styling */
     .stDataFrame {
-        border-radius: 8px;
-        overflow: hidden;
+        border: 1.5px solid rgba(255, 255, 255, 0.18);
+        border-radius: 0px;
     }
 
-    /* Input elements */
-    .stSelectbox label, .stMultiSelect label, .stDateInput label,
-    .stTextInput label, .stSlider label {
-        color: #8B949E !important;
-        font-weight: 500;
-    }
-
-    /* Divider lines */
+    /* Dividers */
     hr {
-        border-color: rgba(57, 121, 166, 0.15);
+        border-color: rgba(255, 255, 255, 0.12) !important;
     }
 
-    /* Caption text */
+    /* Captions */
     .stCaption {
-        color: #8B949E;
+        color: #94A3B8 !important;
     }
 
-    /* Better scrollbar for dark mode */
+    /* Headings */
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Montserrat', sans-serif !important;
+        font-weight: 800 !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Scrollbars */
     ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
     }
     ::-webkit-scrollbar-track {
-        background: #0D1117;
+        background: #070A0F;
     }
     ::-webkit-scrollbar-thumb {
-        background: #30363D;
-        border-radius: 4px;
+        background: #1E293B;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
     ::-webkit-scrollbar-thumb:hover {
-        background: #3979A6;
+        background: #38BDF8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -186,7 +333,7 @@ CISA_LIVE_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_
 # -----------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def get_catalog_from_file(catalog_path: Path):
-    """Load catalog from local JSON snapshot."""
+    """Load catalog from local JSON snapshot with caching."""
     return load_catalog(catalog_path)
 
 
@@ -213,27 +360,113 @@ if "live_metadata" not in st.session_state:
 if "live_records" not in st.session_state:
     st.session_state.live_records = None
 
+# Filter state
+if "filter_vendors" not in st.session_state:
+    st.session_state.filter_vendors = []
+if "filter_product" not in st.session_state:
+    st.session_state.filter_product = ""
+if "filter_ransomware" not in st.session_state:
+    st.session_state.filter_ransomware = "All"
+if "filter_due_status" not in st.session_state:
+    st.session_state.filter_due_status = "All"
+
+# Resolve Active Catalog
+if st.session_state.use_live_cisa and st.session_state.live_records:
+    raw_metadata = st.session_state.live_metadata
+    all_records = st.session_state.live_records
+    catalog_source_label = "LIVE CISA FEED"
+    catalog_source_tag = "[LIVE FEED]"
+else:
+    raw_metadata, all_records = get_catalog_from_file(config.CATALOG_PATH)
+    catalog_source_label = f"FROZEN SNAPSHOT ({config.CATALOG_PATH.name})"
+    catalog_source_tag = "[CATALOG: FROZEN]"
+
+unique_vendors = sorted({r.vendor_project for r in all_records if r.vendor_project})
+st.session_state.available_vendors = unique_vendors
+
 
 # -----------------------------------------------------------------------------
-# Sidebar: Provenance & Filters
+# Quick-Triage Action Callbacks
+# -----------------------------------------------------------------------------
+def apply_triage_preset(preset: str):
+    """Callback to apply one-click quick triage presets across the platform."""
+    if preset == "ALL":
+        st.session_state.filter_vendors = []
+        st.session_state.filter_product = ""
+        st.session_state.filter_ransomware = "All"
+        st.session_state.filter_due_status = "All"
+    elif preset == "URGENT":
+        st.session_state.filter_vendors = []
+        st.session_state.filter_product = ""
+        st.session_state.filter_ransomware = "All"
+        st.session_state.filter_due_status = "overdue"
+    elif preset == "RANSOMWARE":
+        st.session_state.filter_vendors = []
+        st.session_state.filter_product = ""
+        st.session_state.filter_ransomware = "Known"
+        st.session_state.filter_due_status = "All"
+    elif preset == "MAJOR_TECH":
+        majors = ["Adobe", "Apple", "Cisco", "Google", "Microsoft"]
+        avail = st.session_state.get("available_vendors", unique_vendors)
+        st.session_state.filter_vendors = [v for v in majors if v in avail]
+        st.session_state.filter_product = ""
+        st.session_state.filter_ransomware = "All"
+        st.session_state.filter_due_status = "All"
+
+
+def detect_active_preset(catalog_vendors: list) -> str:
+    """Identify which quick-triage preset matches the current filter settings."""
+    v = set(st.session_state.get("filter_vendors", []))
+    p = st.session_state.get("filter_product", "").strip()
+    r = st.session_state.get("filter_ransomware", "All")
+    d = st.session_state.get("filter_due_status", "All")
+
+    if not v and not p and r == "All" and d == "All":
+        return "ALL"
+    if not v and not p and r == "All" and d == "overdue":
+        return "URGENT"
+    if not v and not p and r == "Known" and d == "All":
+        return "RANSOMWARE"
+    majors = set(m for m in ["Adobe", "Apple", "Cisco", "Google", "Microsoft"] if m in catalog_vendors)
+    if v == majors and not p and r == "All" and d == "All":
+        return "MAJOR_TECH"
+    return "CUSTOM"
+
+
+active_triage = detect_active_preset(unique_vendors)
+
+
+# -----------------------------------------------------------------------------
+# Sidebar: Provenance & Controls
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.title("🛡️ CISA KEV Hub")
-    st.caption("Defensive Prioritization & Remediation Platform")
+    st.markdown("""
+    <div style="margin-bottom: 12px;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #38BDF8; letter-spacing: 0.12em; text-transform: uppercase;">
+            // TELEMETRY // SYSTEM 3.0
+        </div>
+        <div style="font-size: 1.35rem; font-weight: 800; color: #FFFFFF; letter-spacing: -0.01em; margin-top: 2px;">
+            CISA KEV // HUD
+        </div>
+        <div style="font-size: 0.72rem; color: #94A3B8; margin-top: 2px;">
+            Defensive Triage &amp; Remediation Hub
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.subheader("Data Source Mode")
+    st.markdown("**// DATA SOURCE FEED**")
 
-    sync_col1, sync_col2 = st.columns([2, 1])
+    sync_col1, sync_col2 = st.columns([1.4, 1])
     with sync_col1:
         if st.session_state.use_live_cisa:
-            st.success("🟢 Using Live CISA Feed")
+            st.markdown("<span class='hud-tag hud-tag-green'>[FEED: LIVE CISA]</span>", unsafe_allow_html=True)
         else:
-            st.info("📦 Bundled Frozen Snapshot")
+            st.markdown("<span class='hud-tag hud-tag-cyan'>[CATALOG: FROZEN]</span>", unsafe_allow_html=True)
 
     with sync_col2:
         if not st.session_state.use_live_cisa:
-            if st.button("Fetch Live", help="Download current feed from CISA.gov"):
+            if st.button("[ FETCH LIVE ]", help="Download current live JSON feed from CISA.gov"):
                 with st.spinner("Connecting to CISA..."):
                     try:
                         meta, recs = fetch_live_catalog()
@@ -242,80 +475,93 @@ with st.sidebar:
                         st.session_state.use_live_cisa = True
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Failed to fetch live feed: {e}")
+                        st.error(f"Live fetch error: {e}")
         else:
-            if st.button("Reset Frozen"):
+            if st.button("[ RESET FROZEN ]"):
                 st.session_state.use_live_cisa = False
                 st.rerun()
 
-    # Determine Active Catalog
-    if st.session_state.use_live_cisa and st.session_state.live_records:
-        raw_metadata = st.session_state.live_metadata
-        all_records = st.session_state.live_records
-        catalog_source_label = "Live CISA Feed"
-    else:
-        raw_metadata, all_records = get_catalog_from_file(config.CATALOG_PATH)
-        catalog_source_label = f"Frozen Snapshot ({config.CATALOG_PATH.name})"
-
     st.markdown("---")
-    st.subheader("Filter Controls")
+    st.markdown("**// PRIMARY FILTER CONTROLS**")
 
-    # Reference Date Picker
-    default_ref = config.DEFAULT_REFERENCE_DATE
-    ref_date_input = st.date_input(
-        "Reference Date",
-        value=default_ref,
-        help="Date against which age and deadline offsets are calculated."
-    )
-    if isinstance(ref_date_input, datetime):
-        reference_date = ref_date_input.date()
-    else:
-        reference_date = ref_date_input
-
-    # Due Soon Window Slider
-    due_soon_window = st.slider(
-        "Due-Soon Window (Days)",
-        min_value=1,
-        max_value=60,
-        value=config.DUE_SOON_DAYS,
-        help="Days from reference date considered 'Due Soon' (inclusive)."
+    # Simple Search & Quick Controls (Always Visible)
+    selected_vendors = st.multiselect(
+        "Vendor / Project",
+        options=unique_vendors,
+        key="filter_vendors",
+        help="Filter to records matching specific vendors."
     )
 
-    # Unique Vendors & Products
-    unique_vendors = sorted({r.vendor_project for r in all_records if r.vendor_project})
-    selected_vendors = st.multiselect("Filter by Vendor(s)", options=unique_vendors)
+    product_query = st.text_input(
+        "Product Keyword",
+        placeholder="e.g. Windows, IOS, Acrobat",
+        key="filter_product",
+        help="Case-insensitive substring search for affected products."
+    )
 
-    # Product Text Search
-    product_query = st.text_input("Filter by Product", placeholder="e.g. Windows, IOS, Acrobat")
-
-    # Ransomware Campaign Use
     ransomware_filter = st.selectbox(
         "Ransomware Campaign Use",
         options=["All", "Known", "Unknown"],
-        index=0
+        key="filter_ransomware",
+        help="Filter by documented ransomware weaponization."
     )
 
-    # Deadline Status Filter
+    # Reference window temporary for label
+    due_window_val = st.session_state.get("filter_due_window", config.DUE_SOON_DAYS)
+
     due_status_filter = st.selectbox(
-        "Deadline Status",
+        "Compliance Deadline Status",
         options=["All", "overdue", "due_soon", "not_yet_due", "no_due_date"],
         format_func=lambda s: {
-            "All": "All Statuses",
-            "overdue": "🚨 Overdue (< 0 days)",
-            "due_soon": f"⚠️ Due Soon (0–{due_soon_window} days)",
-            "not_yet_due": f"🟢 Not Yet Due (> {due_soon_window} days)",
-            "no_due_date": "⚪ No Due Date Listed",
+            "All": "[ ALL DEADLINE STATUSES ]",
+            "overdue": "[MANDATE: OVERDUE] (< 0 days)",
+            "due_soon": f"[STATUS: DUE SOON] (0–{due_window_val} days)",
+            "not_yet_due": f"[STATUS: NOT YET DUE] (> {due_window_val} days)",
+            "no_due_date": "[NO DUE DATE LISTED]",
         }.get(s, s),
-        index=0
+        key="filter_due_status",
+        help="Filter by CISA remediation deadline compliance."
     )
 
-    # Date Added Range
-    st.markdown("**Date Added Range**")
-    date_col1, date_col2 = st.columns(2)
-    with date_col1:
-        start_date = st.date_input("From", value=None)
-    with date_col2:
-        end_date = st.date_input("To", value=None)
+    st.markdown("---")
+
+    # Expandable Drawer for Deep Date-Math Dials
+    with st.expander("[ ADVANCED AUDIT & DATE CONTROLS ]", expanded=False):
+        st.caption("Deep date-math calibration for historical verification and audit baselines.")
+
+        ref_date_input = st.date_input(
+            "Audit Reference Date",
+            value=st.session_state.get("filter_ref_date", config.DEFAULT_REFERENCE_DATE),
+            help="Reference baseline against which age and compliance deadlines are evaluated.",
+            key="filter_ref_date"
+        )
+        if isinstance(ref_date_input, datetime):
+            reference_date = ref_date_input.date()
+        else:
+            reference_date = ref_date_input
+
+        due_soon_window = st.slider(
+            "Due-Soon Window (Days)",
+            min_value=1,
+            max_value=60,
+            value=st.session_state.get("filter_due_window", config.DUE_SOON_DAYS),
+            help="Calendar day threshold from reference date categorized as Due Soon.",
+            key="filter_due_window"
+        )
+
+        st.markdown("**Catalog Date Added Boundaries**")
+        date_col1, date_col2 = st.columns(2)
+        with date_col1:
+            start_date = st.date_input("From Date", value=st.session_state.get("filter_date_start", None), key="filter_date_start")
+        with date_col2:
+            end_date = st.date_input("To Date", value=st.session_state.get("filter_date_end", None), key="filter_date_end")
+
+# Resolve reference date & window
+if "reference_date" not in locals():
+    ref_val = st.session_state.get("filter_ref_date", config.DEFAULT_REFERENCE_DATE)
+    reference_date = ref_val.date() if isinstance(ref_val, datetime) else ref_val
+if "due_soon_window" not in locals():
+    due_soon_window = st.session_state.get("filter_due_window", config.DUE_SOON_DAYS)
 
 
 # -----------------------------------------------------------------------------
@@ -325,32 +571,27 @@ config.DUE_SOON_DAYS = due_soon_window
 selected = list(all_records)
 applied_filters = []
 
-# Apply Vendor Filter
 if selected_vendors:
     selected = [r for r in selected if r.vendor_project and r.vendor_project in selected_vendors]
     applied_filters.append(f"vendor in {selected_vendors}")
 
-# Apply Product Filter
 if product_query.strip():
     selected = filter_by_product(selected, product_query.strip())
     applied_filters.append(f"product = '{product_query.strip()}'")
 
-# Apply Ransomware Filter
 if ransomware_filter != "All":
     selected = filter_by_ransomware(selected, ransomware_filter)
     applied_filters.append(f"ransomware = '{ransomware_filter}'")
 
-# Apply Deadline Status Filter
 if due_status_filter != "All":
     selected = filter_by_due_status(selected, due_status_filter, reference_date)
     applied_filters.append(f"due_status = '{due_status_filter}'")
 
-# Apply Date Range Filter
 if start_date or end_date:
     selected = filter_by_date_range(selected, start_date, end_date)
     applied_filters.append(f"date_added between {start_date or 'any'} and {end_date or 'any'}")
 
-# Build Prioritized Worklist Object
+# Build Deterministic Prioritized Worklist Object
 worklist_metadata = dict(raw_metadata)
 worklist_metadata["reference_date"] = reference_date.isoformat()
 worklist = PrioritizedWorklist(selected, worklist_metadata, applied_filters, reference_date=reference_date)
@@ -361,65 +602,268 @@ data_quality = find_data_quality_issues(all_records)
 # -----------------------------------------------------------------------------
 # Main Header & Provenance Status Bar
 # -----------------------------------------------------------------------------
-st.title("🛡️ CISA KEV Prioritization Dashboard")
-st.markdown("#### Defensive Vulnerability Prioritization & Audit Platform")
+st.markdown("""
+<div style="margin-bottom: 0.8rem;">
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.74rem; color: #38BDF8; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 4px;">
+        // CYBER-HUD DEFENSIVE COMMAND INTERFACE // SYSTEM VERSION 3.0
+    </div>
+    <h1 style="font-size: 2.15rem; font-weight: 900; margin: 0; padding: 0; letter-spacing: -0.01em; color: #FFFFFF;">
+        CISA KEV // PRIORITIZATION HUD
+    </h1>
+    <div style="font-size: 0.86rem; color: #94A3B8; margin-top: 4px; font-weight: 500;">
+        Defensive Vulnerability Triage, Federal Remediation Tracking &amp; Forensic Catalog Audit
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-provenance_col1, provenance_col2, provenance_col3, provenance_col4 = st.columns(4)
-with provenance_col1:
-    st.caption(f"**Catalog Version:** `{raw_metadata.get('catalog_version', 'Unknown')}`")
-with provenance_col2:
-    st.caption(f"**Catalog Release:** `{raw_metadata.get('date_released', 'Unknown')[:10]}`")
-with provenance_col3:
-    st.caption(f"**Reference Date:** `{reference_date.isoformat()}`")
-with provenance_col4:
-    st.caption(f"**Data Mode:** `{catalog_source_label}`")
+# Provenance Status Bar
+st.markdown(f"""
+<div class="hud-card" style="padding: 10px 18px; margin-bottom: 14px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; font-size: 0.76rem; font-family: 'JetBrains Mono', monospace;">
+    <div><span class="hud-slash">//</span><strong>CATALOG:</strong> {raw_metadata.get('catalog_version', 'Unknown')}</div>
+    <div><span class="hud-slash">//</span><strong>RELEASED:</strong> {raw_metadata.get('date_released', 'Unknown')[:10]}</div>
+    <div><span class="hud-slash">//</span><strong>REFERENCE DATE:</strong> {reference_date.isoformat()}</div>
+    <div><span class="hud-slash">//</span><strong>FEED STATUS:</strong> <span class="hud-tag {'hud-tag-green' if st.session_state.use_live_cisa else 'hud-tag-cyan'}">{catalog_source_tag}</span></div>
+</div>
+""", unsafe_allow_html=True)
+
 
 # -----------------------------------------------------------------------------
-# Key Metric Cards (KPIs)
+# Quick-Triage Action Bar (One-Click Presets)
 # -----------------------------------------------------------------------------
-kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
-with kpi1:
-    st.metric(label="Selected Records", value=f"{stats['total']:,}", delta=f"of {len(all_records):,} Total")
-with kpi2:
-    st.metric(label="🚨 Overdue", value=f"{stats['overdue_count']:,}", delta="Urgent Action" if stats['overdue_count'] else None, delta_color="inverse")
-with kpi3:
-    st.metric(label="⚠️ Due Soon", value=f"{stats['due_soon_count']:,}", delta=f"0–{due_soon_window} days" if stats['due_soon_count'] else None)
-with kpi4:
-    st.metric(label="🎯 Ransomware Known", value=f"{stats['ransomware_known_count']:,}", delta="High Threat")
-with kpi5:
-    mean_age = f"{stats['mean_age_days']:.0f} d" if stats['mean_age_days'] is not None else "N/A"
-    median_age = f"{stats['median_age_days']:.0f} d" if stats['median_age_days'] is not None else "N/A"
-    st.metric(label="Median Catalog Age", value=median_age, delta=f"Mean: {mean_age}")
+st.markdown("""
+<div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 6px;">
+    <span style="font-size: 0.74rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #CBD5E1; letter-spacing: 0.08em;">
+        // QUICK-TRIAGE ACTION BAR
+    </span>
+    <span class="hud-tag hud-tag-cyan">[TELEMETRY: 1-CLICK DISPATCH]</span>
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown("---")
+triage_c1, triage_c2, triage_c3, triage_c4 = st.columns(4)
+
+with triage_c1:
+    st.button(
+        "[ ALL VULNERABILITIES ]",
+        use_container_width=True,
+        type="primary" if active_triage == "ALL" else "secondary",
+        on_click=apply_triage_preset,
+        args=("ALL",),
+        help="Reset filters to display the complete unconstrained catalog."
+    )
+
+with triage_c2:
+    st.button(
+        "[ URGENT REMEDIATION ]",
+        use_container_width=True,
+        type="primary" if active_triage == "URGENT" else "secondary",
+        on_click=apply_triage_preset,
+        args=("URGENT",),
+        help="Isolate vulnerabilities that have breached mandatory federal remediation deadlines."
+    )
+
+with triage_c3:
+    st.button(
+        "[ RANSOMWARE CAMPAIGNS ]",
+        use_container_width=True,
+        type="primary" if active_triage == "RANSOMWARE" else "secondary",
+        on_click=apply_triage_preset,
+        args=("RANSOMWARE",),
+        help="Isolate vulnerabilities with documented threat-actor weaponization in ransomware campaigns."
+    )
+
+with triage_c4:
+    st.button(
+        "[ MAJOR TECH PLATFORMS ]",
+        use_container_width=True,
+        type="primary" if active_triage == "MAJOR_TECH" else "secondary",
+        on_click=apply_triage_preset,
+        args=("MAJOR_TECH",),
+        help="Filter to enterprise infrastructure vendors: Microsoft, Apple, Cisco, Google, Adobe."
+    )
 
 
-# -- Chart Styling Helper ------------------------------------------------------
-def apply_dark_chart_style(fig, ax, title_text=""):
-    """Apply consistent dark theme to matplotlib figures in the dashboard."""
-    fig.set_facecolor(COLOR_BG_CARD)
-    ax.set_facecolor(COLOR_BG_CARD)
+# -----------------------------------------------------------------------------
+# Plain-English Risk Explainer Card (Executive Translation)
+# -----------------------------------------------------------------------------
+def get_risk_explainer_html(preset: str, stats_dict: dict, window_days: int) -> str:
+    """Translate technical compliance metrics into plain English business context."""
+    if preset == "URGENT":
+        title_tag = "[TACTICAL FOCUS // OVERDUE MANDATES]"
+        summary_body = (
+            f"You are viewing <strong>{stats_dict['overdue_count']:,} overdue vulnerabilities</strong>. "
+            "Under <strong>CISA Binding Operational Directive (BOD) 22-01</strong>, federal civilian executive agencies "
+            "are legally required to remediate KEV vulnerabilities within specified calendar deadlines. "
+            "These deadlines have now expired. In defensive operations, overdue vulnerabilities carry confirmed, active "
+            "in-the-wild exploitation and represent highest immediate exposure to automated exploitation and lateral movement. "
+            "Remediation teams must assign Priority 1 status to these records immediately."
+        )
+    elif preset == "RANSOMWARE":
+        title_tag = "[TACTICAL FOCUS // RANSOMWARE OPERATIONS]"
+        summary_body = (
+            f"You are viewing <strong>{stats_dict['ransomware_known_count']:,} vulnerabilities with confirmed ransomware campaign weaponization</strong>. "
+            "Threat syndicates leverage these specific weaknesses for initial breach access, credential exfiltration, and lateral "
+            "privilege escalation prior to data extortion. Remediating these vulnerabilities eliminates documented ransomware entry "
+            "points and protects business operational continuity."
+        )
+    elif preset == "MAJOR_TECH":
+        title_tag = "[TACTICAL FOCUS // ENTERPRISE TIER PLATFORMS]"
+        summary_body = (
+            f"You are viewing <strong>{stats_dict['total']:,} vulnerabilities affecting major technology platforms</strong> "
+            "(Microsoft, Apple, Cisco, Google, Adobe). While high catalog numbers reflect widespread enterprise adoption, transparent "
+            "disclosure, and extensive vulnerability research rather than flawed engineering (<strong>'Counts ≠ Risk'</strong>), "
+            "their ubiquity makes them prime targets for widespread intrusion campaigns. Coordinate deployment across identity and boundary systems."
+        )
+    else:
+        title_tag = "[EXECUTIVE BRIEFING // BINDING DIRECTIVE COMPLIANCE]"
+        summary_body = (
+            f"Displaying <strong>{stats_dict['total']:,} vulnerabilities</strong> from the authoritative CISA KEV catalog. "
+            "Unlike academic CVSS scores, every flaw in this catalog has <strong>confirmed, weaponized in-the-wild exploitation</strong>. "
+            "Under federal directive BOD 22-01, remediation is tracked against auditable compliance deadlines: "
+            f"<strong>{stats_dict['overdue_count']:,}</strong> have expired past their federal due date (Overdue), "
+            f"<strong>{stats_dict['due_soon_count']:,}</strong> expire within {window_days} days (Due Soon), and "
+            f"<strong>{stats_dict['ransomware_known_count']:,}</strong> are tied to ransomware operations. "
+            "Defensive triage should address overdue items first."
+        )
+
+    return f"""
+    <div class="hud-card hud-card-accent-cyan" style="margin-top: 10px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: 800; font-size: 0.85rem; letter-spacing: 0.05em; color: #FFFFFF;">
+                <span class="hud-slash">//</span>EXECUTIVE RISK TRANSLATION &amp; MANDATE DIRECTIVE
+            </span>
+            <span class="hud-tag hud-tag-cyan">{title_tag}</span>
+        </div>
+        <div style="font-size: 0.84rem; line-height: 1.6; color: #CBD5E1;">
+            {summary_body}
+        </div>
+        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.74rem; font-family: 'JetBrains Mono', monospace; color: #94A3B8;">
+            <span><span class="hud-slash">//</span>STATUS: <strong style="color: #EF4444;">{stats_dict['overdue_count']:,} OVERDUE</strong></span>
+            <span><span class="hud-slash">//</span>WINDOW: <strong style="color: #F59E0B;">{stats_dict['due_soon_count']:,} DUE SOON</strong></span>
+            <span><span class="hud-slash">//</span>CAMPAIGNS: <strong style="color: #38BDF8;">{stats_dict['ransomware_known_count']:,} RANSOMWARE</strong></span>
+            <span><span class="hud-slash">//</span>PRINCIPLE: <strong style="color: #10B981;">COUNTS ≠ RISK</strong></span>
+        </div>
+    </div>
+    """
+
+st.markdown(get_risk_explainer_html(active_triage, stats, due_soon_window), unsafe_allow_html=True)
+
+
+# -----------------------------------------------------------------------------
+# Key Metric Cards (KPI Telemetry)
+# -----------------------------------------------------------------------------
+kpi_c1, kpi_c2, kpi_c3, kpi_c4, kpi_c5 = st.columns(5)
+
+with kpi_c1:
+    st.markdown(f"""
+    <div class="hud-kpi-card">
+        <div class="hud-kpi-header">
+            <span><span class="hud-slash">//</span>SELECTED SET</span>
+            <span class="hud-tag hud-tag-cyan">[SYS.ACTIVE]</span>
+        </div>
+        <div class="hud-kpi-value">{stats['total']:,}</div>
+        <div class="hud-kpi-delta">OF {len(all_records):,} TOTAL CATALOG</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_c2:
+    st.markdown(f"""
+    <div class="hud-kpi-card">
+        <div class="hud-kpi-header">
+            <span><span class="hud-slash">//</span>MANDATE OVERDUE</span>
+            <span class="hud-tag hud-tag-red">[MANDATE: OVERDUE]</span>
+        </div>
+        <div class="hud-kpi-value" style="color: #EF4444;">{stats['overdue_count']:,}</div>
+        <div class="hud-kpi-delta" style="color: #EF4444;">{"URGENT REMEDIATION REQ" if stats['overdue_count'] else "ZERO OVERDUE"}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_c3:
+    st.markdown(f"""
+    <div class="hud-kpi-card">
+        <div class="hud-kpi-header">
+            <span><span class="hud-slash">//</span>DUE SOON WINDOW</span>
+            <span class="hud-tag hud-tag-amber">[STATUS: DUE SOON]</span>
+        </div>
+        <div class="hud-kpi-value" style="color: #F59E0B;">{stats['due_soon_count']:,}</div>
+        <div class="hud-kpi-delta">0 TO {due_soon_window} CALENDAR DAYS</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_c4:
+    st.markdown(f"""
+    <div class="hud-kpi-card">
+        <div class="hud-kpi-header">
+            <span><span class="hud-slash">//</span>RANSOMWARE USE</span>
+            <span class="hud-tag hud-tag-red">[THREAT: RANSOMWARE]</span>
+        </div>
+        <div class="hud-kpi-value">{stats['ransomware_known_count']:,}</div>
+        <div class="hud-kpi-delta">CONFIRMED CAMPAIGN USE</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_c5:
+    mean_age_str = f"{stats['mean_age_days']:.0f} d" if stats['mean_age_days'] is not None else "N/A"
+    median_age_str = f"{stats['median_age_days']:.0f} d" if stats['median_age_days'] is not None else "N/A"
+    st.markdown(f"""
+    <div class="hud-kpi-card">
+        <div class="hud-kpi-header">
+            <span><span class="hud-slash">//</span>CATALOG AGE</span>
+            <span class="hud-tag hud-tag-cyan">[TELEMETRY: AGE]</span>
+        </div>
+        <div class="hud-kpi-value">{median_age_str}</div>
+        <div class="hud-kpi-delta">MEDIAN (MEAN: {mean_age_str})</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+
+
+# -----------------------------------------------------------------------------
+# Matplotlib Cyber-HUD Theme Engine
+# -----------------------------------------------------------------------------
+def apply_cyber_hud_chart_style(fig, ax, title_text=""):
+    """Apply authentic Cyber-HUD telemetry theme to Matplotlib figures."""
+    fig.set_facecolor(COLOR_HUD_BG)
+    ax.set_facecolor(COLOR_HUD_PANEL)
+
+    # Crisp high-contrast spines
     ax.spines[["top", "right"]].set_visible(False)
-    ax.spines["bottom"].set_color(COLOR_TEXT_SECONDARY)
-    ax.spines["left"].set_color(COLOR_TEXT_SECONDARY)
-    ax.tick_params(colors=COLOR_TEXT_SECONDARY, which="both")
-    ax.xaxis.label.set_color(COLOR_TEXT_SECONDARY)
-    ax.yaxis.label.set_color(COLOR_TEXT_SECONDARY)
-    ax.grid(axis="y", color="#30363D", alpha=0.4, linewidth=0.5)
+    ax.spines["bottom"].set_color("#FFFFFF")
+    ax.spines["bottom"].set_linewidth(1.2)
+    ax.spines["left"].set_color("#FFFFFF")
+    ax.spines["left"].set_linewidth(1.2)
+
+    # Crisp ticks and typography
+    ax.tick_params(colors="#FFFFFF", which="both", labelsize=9)
+    ax.xaxis.label.set_color("#CBD5E1")
+    ax.yaxis.label.set_color("#CBD5E1")
+    ax.xaxis.label.set_fontsize(9.5)
+    ax.yaxis.label.set_fontsize(9.5)
+
+    # Subtle dashed cyber grid
+    ax.grid(axis="y", color="#FFFFFF", alpha=0.10, linewidth=0.6, linestyle="--")
     ax.set_axisbelow(True)
+
     if title_text:
-        ax.set_title(title_text, fontweight="bold", loc="left", color=COLOR_TEXT, fontsize=12)
+        ax.set_title(
+            f"// {title_text.upper()}",
+            fontweight="bold",
+            loc="left",
+            color="#FFFFFF",
+            fontsize=10.5,
+            pad=10
+        )
 
 
 # -----------------------------------------------------------------------------
-# Tabbed Navigation
+# Tabbed Cyber-HUD Navigation
 # -----------------------------------------------------------------------------
 tab_worklist, tab_charts, tab_inspector, tab_quality, tab_docs = st.tabs([
-    "📋 Prioritized Worklist",
-    "📊 Visual Analytics",
-    "🔍 CVE Inspector",
-    "🛡️ Data Quality & Audit",
-    "📖 Prioritization Policy"
+    "[01 // WORKLIST]",
+    "[02 // VISUAL ANALYTICS]",
+    "[03 // CVE INSPECTOR]",
+    "[04 // AUDIT & QUALITY]",
+    "[05 // POLICY & PLAYBOOK]"
 ])
 
 
@@ -427,17 +871,37 @@ tab_worklist, tab_charts, tab_inspector, tab_quality, tab_docs = st.tabs([
 # Tab 1: Prioritized Worklist (Remediation Hub)
 # -----------------------------------------------------------------------------
 with tab_worklist:
-    st.subheader("Deterministic Remediation Worklist")
-    st.caption("Sorted strictly: **Overdue first** (most overdue first) $\\to$ **Upcoming deadlines** $\\to$ **Missing deadlines** $\\to$ **Oldest date added**.")
+    st.markdown("""
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">
+            // DETERMINISTIC REMEDIATION WORKLIST
+        </div>
+        <div style="font-size: 0.8rem; color: #94A3B8; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">
+            SORTING PROTOCOL: [1] Overdue flaws (furthest overdue first) &rarr; [2] Upcoming deadlines (earliest due first) &rarr; [3] Unspecified deadlines &rarr; [4] Oldest date added tie-break.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     prioritized_records = worklist.get_records()
 
     if not prioritized_records:
-        st.warning("No vulnerability records match the selected filter criteria.")
+        st.markdown("""
+        <div class="hud-card hud-card-accent-amber" style="padding: 14px 18px;">
+            <span class="hud-tag hud-tag-amber">[QUERY.EMPTY]</span> No vulnerability records match the active filter criteria.
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        # Build pandas DataFrame for interactive display
+        # Build DataFrame with status brackets
+        status_bracket_map = {
+            "overdue": "[OVERDUE]",
+            "due_soon": "[DUE SOON]",
+            "not_yet_due": "[NOT YET DUE]",
+            "no_due_date": "[NO DUE DATE]",
+        }
+
         table_rows = []
         for rank, r in enumerate(prioritized_records, start=1):
+            raw_status = r.due_status(reference_date)
             table_rows.append({
                 "Priority": rank,
                 "CVE ID": r.cve_id,
@@ -445,7 +909,7 @@ with tab_worklist:
                 "Product": r.product or "(missing)",
                 "Due Date": r.due_date.isoformat() if r.due_date else "None",
                 "Days Until Due": r.days_until_due(reference_date),
-                "Status": r.due_status(reference_date),
+                "Status": status_bracket_map.get(raw_status, raw_status),
                 "Date Added": r.date_added.isoformat() if r.date_added else "None",
                 "Ransomware Use": r.known_ransomware_campaign_use or "Unknown",
                 "Short Description": r.short_description or "",
@@ -454,7 +918,10 @@ with tab_worklist:
         df_worklist = pd.DataFrame(table_rows)
 
         # Quick Search inside filtered table
-        search_kw = st.text_input("Quick Search inside selected worklist (by CVE, Vendor, Product, or keyword):", placeholder="Type keyword...")
+        search_kw = st.text_input(
+            "// QUICK SEARCH INSIDE SELECTED WORKLIST (CVE, VENDOR, PRODUCT, KEYWORD):",
+            placeholder="Type keyword to filter current table..."
+        )
         if search_kw.strip():
             kw = search_kw.strip().lower()
             df_worklist = df_worklist[
@@ -467,7 +934,7 @@ with tab_worklist:
         # Interactive Dataframe
         st.dataframe(
             df_worklist.drop(columns=["Short Description"]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "Priority": st.column_config.NumberColumn("Priority", width="small"),
@@ -479,36 +946,58 @@ with tab_worklist:
         )
 
         # Export Worklist Section
-        st.markdown("#### 📥 Export Prioritized Worklist")
-        export_col1, export_col2 = st.columns(2)
+        st.markdown("""
+        <div style="margin-top: 14px; margin-bottom: 8px;">
+            <div style="font-size: 0.95rem; font-weight: 800; color: #FFFFFF;">
+                // EXPORT REMEDIATION WORKLIST
+            </div>
+            <div style="font-size: 0.74rem; color: #94A3B8; font-family: 'JetBrains Mono', monospace;">
+                Download auditable, prioritized queue formatted for enterprise ticketing or forensic analysis.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with export_col1:
-            # Generate official CSV with provenance header
+        export_c1, export_c2 = st.columns(2)
+
+        with export_c1:
             csv_buffer = io.StringIO()
-            provenance_line = (
-                f"# Catalog: {raw_metadata.get('catalog_version', 'Unknown')} | "
-                f"Reference: {reference_date} | "
-                f"Due soon: 0-{due_soon_window} days | "
-                f"Exported: {date.today().isoformat()}\n"
-            )
-            csv_buffer.write(provenance_line)
-            df_worklist.drop(columns=["Priority", "Short Description"]).to_csv(csv_buffer, index=False)
+            provenance = (
+                f"# Catalog version: {worklist_metadata.get('catalog_version', 'Unknown')}; "
+                f"Download date: {worklist_metadata.get('download_date') or 'Unknown'}; "
+                f"Reference date: {worklist.reference_date}; Due soon: 0-{due_soon_window} days"
+            ).replace("\r", " ").replace("\n", " ")
+            csv_buffer.write(provenance + "\n")
+            writer = csv.writer(csv_buffer, lineterminator="\n")
+            writer.writerow(WORKLIST_CSV_COLUMNS)
+            for record in prioritized_records:
+                values = [
+                    record.cve_id, record.vendor_project, record.product,
+                    record.date_added, record.due_date,
+                    record.due_status(worklist.reference_date) == "overdue",
+                    record.days_until_due(worklist.reference_date),
+                    record.age_in_days(worklist.reference_date),
+                    record.known_ransomware_campaign_use, record.required_action,
+                ]
+                writer.writerow([
+                    value.isoformat() if isinstance(value, date) else value
+                    for value in values
+                ])
             st.download_button(
-                label="Download Prioritized Worklist (CSV)",
+                label="[ DOWNLOAD WORKLIST (CSV) ]",
                 data=csv_buffer.getvalue().encode("utf-8"),
                 file_name=f"prioritized_worklist_{reference_date}.csv",
                 mime="text/csv",
                 help="Includes CISA provenance header on line 1."
             )
 
-        with export_col2:
+        with export_c2:
             json_export = json.dumps(
                 [vars(r) for r in prioritized_records],
                 default=lambda o: o.isoformat() if hasattr(o, "isoformat") else str(o),
                 indent=2
             )
             st.download_button(
-                label="Download Worklist (JSON)",
+                label="[ DOWNLOAD WORKLIST (JSON) ]",
                 data=json_export.encode("utf-8"),
                 file_name=f"prioritized_worklist_{reference_date}.json",
                 mime="application/json"
@@ -516,52 +1005,66 @@ with tab_worklist:
 
 
 # -----------------------------------------------------------------------------
-# Tab 2: Visual Analytics
+# Tab 2: Visual Analytics (Matplotlib Charts)
 # -----------------------------------------------------------------------------
 with tab_charts:
-    st.subheader("Analytical Visualizations")
-    st.info("💡 **Defensive Security Principle: 'Counts ≠ Risk'**\n\nHigh vendor or product counts reflect broad catalog tracking, transparent vulnerability disclosure, and market adoption—not poor security posture or an organization's specific exposure.")
+    st.markdown("""
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">
+            // ANALYTIC TELEMETRY &amp; VISUAL MODELS
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    chart_col1, chart_col2 = st.columns(2)
+    st.markdown("""
+    <div class="hud-card hud-card-accent-cyan" style="padding: 12px 18px; margin-bottom: 16px;">
+        <div style="font-size: 0.74rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: #38BDF8; margin-bottom: 4px;">
+            // DEFENSIVE OPERATIONAL PRINCIPLE [COUNTS != RISK]
+        </div>
+        <div style="font-size: 0.84rem; color: #CBD5E1; line-height: 1.55;">
+            High vendor or product counts reflect broad catalog tracking, transparent vulnerability disclosure, and market adoption—not poor security posture or an organization's specific exposure.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with chart_col1:
-        st.markdown("##### 1. Deadlines at Reference Date")
-        fig1, ax1 = plt.subplots(figsize=(8, 5))
-        apply_dark_chart_style(fig1, ax1, f"Status at {reference_date}")
+    chart_c1, chart_c2 = st.columns(2)
+
+    with chart_c1:
+        st.markdown("**1. DEADLINES AT REFERENCE DATE**")
+        fig1, ax1 = plt.subplots(figsize=(8, 4.6), dpi=150)
+        apply_cyber_hud_chart_style(fig1, ax1, f"STATUS AT {reference_date}")
         counts = [stats["overdue_count"], stats["due_soon_count"], stats["not_yet_due_count"]]
-        labels = ["Overdue (<0d)", f"Due Soon (0–{due_soon_window}d)", f"Not Yet Due (>{due_soon_window}d)"]
-        colors = [COLOR_OVERDUE, COLOR_DUE_SOON, COLOR_SAFE]
-        bars = ax1.bar(labels, counts, color=colors, edgecolor="#0D1117", linewidth=0.5)
-        ax1.bar_label(bars, padding=3, color=COLOR_TEXT, fontweight="bold")
-        ax1.set_ylabel("Records", color=COLOR_TEXT_SECONDARY)
-        ax1.tick_params(axis="x", colors=COLOR_TEXT_SECONDARY)
+        labels = ["OVERDUE (<0d)", f"DUE SOON (0–{due_soon_window}d)", f"NOT YET DUE (>{due_soon_window}d)"]
+        colors = [COLOR_HUD_RED, COLOR_HUD_AMBER, COLOR_HUD_GREEN]
+        bars = ax1.bar(labels, counts, color=colors, edgecolor="#FFFFFF", linewidth=1.0)
+        ax1.bar_label(bars, padding=4, color="#FFFFFF", fontweight="bold", fontsize=9.5)
+        ax1.set_ylabel("Records", color="#CBD5E1")
         fig1.tight_layout()
         st.pyplot(fig1)
         plt.close(fig1)
 
-    with chart_col2:
-        st.markdown("##### 2. Top 10 Vendors by Catalog Presence")
+    with chart_c2:
+        st.markdown("**2. TOP 10 VENDORS BY CATALOG PRESENCE**")
         vendors = count_by_vendor(selected)
-        fig2, ax2 = plt.subplots(figsize=(8, 5))
-        apply_dark_chart_style(fig2, ax2, "Top Vendors (Counts != Risk)")
+        fig2, ax2 = plt.subplots(figsize=(8, 4.6), dpi=150)
+        apply_cyber_hud_chart_style(fig2, ax2, "TOP 10 VENDORS [COUNTS != RISK]")
         top_items = sorted(vendors.items(), key=lambda item: (-item[1], item[0]))[:10]
         if top_items:
             names, counts_v = zip(*top_items)
-            bars2 = ax2.barh(names, counts_v, color=COLOR_PRIMARY, edgecolor="#0D1117", linewidth=0.5)
-            ax2.bar_label(bars2, padding=3, color=COLOR_TEXT, fontweight="bold")
+            bars2 = ax2.barh(names, counts_v, color=COLOR_HUD_CYAN, edgecolor="#FFFFFF", linewidth=0.8)
+            ax2.bar_label(bars2, padding=4, color="#FFFFFF", fontweight="bold", fontsize=9)
             ax2.invert_yaxis()
-            ax2.set_xlabel("Vulnerabilities", color=COLOR_TEXT_SECONDARY)
-            ax2.tick_params(axis="y", colors=COLOR_TEXT_SECONDARY)
+            ax2.set_xlabel("Vulnerabilities", color="#CBD5E1")
         fig2.tight_layout()
         st.pyplot(fig2)
         plt.close(fig2)
 
-    chart_col3, chart_col4 = st.columns(2)
+    chart_c3, chart_c4 = st.columns(2)
 
-    with chart_col3:
-        st.markdown("##### 3. Monthly Addition Trend")
-        fig3, ax3 = plt.subplots(figsize=(8, 5))
-        apply_dark_chart_style(fig3, ax3, "KEV Additions by Month")
+    with chart_c3:
+        st.markdown("**3. MONTHLY ADDITION TREND**")
+        fig3, ax3 = plt.subplots(figsize=(8, 4.6), dpi=150)
+        apply_cyber_hud_chart_style(fig3, ax3, "KEV ADDITIONS BY MONTH [TELEMETRY]")
         dated_records = [r for r in selected if r.date_added]
         if dated_records:
             monthly_counts = {}
@@ -572,36 +1075,35 @@ with tab_charts:
             ax3.plot(
                 sorted_months,
                 [monthly_counts[m] for m in sorted_months],
-                marker="o", color=COLOR_PRIMARY, linewidth=2,
-                markerfacecolor=COLOR_TEXT, markeredgecolor=COLOR_PRIMARY, markersize=5,
+                marker="o", color=COLOR_HUD_CYAN, linewidth=2.2,
+                markerfacecolor="#FFFFFF", markeredgecolor=COLOR_HUD_CYAN, markersize=5,
             )
             ax3.fill_between(
                 sorted_months,
                 [monthly_counts[m] for m in sorted_months],
-                alpha=0.1, color=COLOR_PRIMARY,
+                alpha=0.18, color=COLOR_HUD_CYAN,
             )
             ax3.set_xticks(range(0, len(sorted_months), max(1, len(sorted_months) // 6)))
-            ax3.tick_params(axis="x", rotation=35, colors=COLOR_TEXT_SECONDARY)
-            ax3.set_ylabel("Additions", color=COLOR_TEXT_SECONDARY)
+            ax3.tick_params(axis="x", rotation=35, colors="#FFFFFF")
+            ax3.set_ylabel("Additions", color="#CBD5E1")
         fig3.tight_layout()
         st.pyplot(fig3)
         plt.close(fig3)
 
-    with chart_col4:
-        st.markdown("##### 4. Known vs Unknown Ransomware Use")
-        fig4, ax4 = plt.subplots(figsize=(8, 5))
-        apply_dark_chart_style(fig4, ax4, "Ransomware Associations")
+    with chart_c4:
+        st.markdown("**4. KNOWN VS UNKNOWN RANSOMWARE USE**")
+        fig4, ax4 = plt.subplots(figsize=(8, 4.6), dpi=150)
+        apply_cyber_hud_chart_style(fig4, ax4, "RANSOMWARE CAMPAIGN ASSOCIATIONS")
         rw_known = sum(1 for r in selected if r.known_ransomware_campaign_use == "Known")
         rw_unknown = sum(1 for r in selected if r.known_ransomware_campaign_use == "Unknown")
         rw_bars = ax4.bar(
-            ["Known Campaign Use", "Unknown / Unconfirmed"],
+            ["KNOWN CAMPAIGN USE", "UNKNOWN / UNCONFIRMED"],
             [rw_known, rw_unknown],
-            color=[COLOR_OVERDUE, COLOR_PRIMARY],
-            edgecolor="#0D1117", linewidth=0.5,
+            color=[COLOR_HUD_RED, COLOR_HUD_CYAN],
+            edgecolor="#FFFFFF", linewidth=1.0,
         )
-        ax4.bar_label(rw_bars, padding=3, color=COLOR_TEXT, fontweight="bold")
-        ax4.set_ylabel("Records", color=COLOR_TEXT_SECONDARY)
-        ax4.tick_params(axis="x", colors=COLOR_TEXT_SECONDARY)
+        ax4.bar_label(rw_bars, padding=4, color="#FFFFFF", fontweight="bold", fontsize=9.5)
+        ax4.set_ylabel("Records", color="#CBD5E1")
         fig4.tight_layout()
         st.pyplot(fig4)
         plt.close(fig4)
@@ -611,86 +1113,241 @@ with tab_charts:
 # Tab 3: CVE Inspector
 # -----------------------------------------------------------------------------
 with tab_inspector:
-    st.subheader("Individual Vulnerability Inspector")
-    st.caption("Deep-dive into CISA's required remediation actions, technical notes, and CWE weakness classifications.")
+    st.markdown("""
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">
+            // INDIVIDUAL VULNERABILITY INSPECTOR
+        </div>
+        <div style="font-size: 0.8rem; color: #94A3B8; font-family: 'JetBrains Mono', monospace;">
+            Deep telemetry inspection: mandated remediation directives, technical advisories, and CWE weakness classification.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     if not prioritized_records:
-        st.info("No records to inspect.")
+        st.markdown("""
+        <div class="hud-card hud-card-accent-amber">
+            <span class="hud-tag hud-tag-amber">[INSPECT.EMPTY]</span> No records available to inspect in active selection.
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        cve_options = [f"{r.cve_id} — {r.vendor_project or 'Unknown'} ({r.product or 'Unknown'})" for r in prioritized_records[:100]]
-        selected_cve_label = st.selectbox("Select a Vulnerability to Inspect (showing top 100 in priority order):", options=cve_options)
+        cve_options = [f"{r.cve_id} // {r.vendor_project or 'Unknown'} ({r.product or 'Unknown'})" for r in prioritized_records[:100]]
+        selected_cve_label = st.selectbox(
+            "// SELECT VULNERABILITY TO INSPECT (SHOWING TOP 100 IN PRIORITY ORDER):",
+            options=cve_options
+        )
 
-        selected_cve_id = selected_cve_label.split(" — ")[0]
+        selected_cve_id = selected_cve_label.split(" // ")[0]
         inspected_record = next((r for r in prioritized_records if r.cve_id == selected_cve_id), None)
 
         if inspected_record:
-            st.markdown(f"### {inspected_record.cve_id}: {inspected_record.vulnerability_name or 'No Title'}")
+            st.markdown(f"""
+            <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin-top: 6px; margin-bottom: 12px;">
+                <span class="hud-slash">//</span>{inspected_record.cve_id} : {inspected_record.vulnerability_name or 'NO FORMAL TITLE'}
+            </div>
+            """, unsafe_allow_html=True)
 
-            detail_col1, detail_col2 = st.columns([2, 1])
+            detail_c1, detail_c2 = st.columns([2, 1])
 
-            with detail_col1:
-                st.markdown("**Vulnerability Description:**")
-                st.write(inspected_record.short_description or "No description provided.")
+            with detail_c1:
+                # Description
+                st.markdown(f"""
+                <div class="hud-card" style="margin-bottom: 12px;">
+                    <div style="font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #38BDF8; font-weight: 700; margin-bottom: 6px;">
+                        // VULNERABILITY SUMMARY &amp; ATTACK VECTOR
+                    </div>
+                    <div style="font-size: 0.86rem; line-height: 1.6; color: #E2E8F0;">
+                        {inspected_record.short_description or 'No description provided.'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-                st.markdown("**🛡️ CISA Required Action (Remediation Mandate):**")
-                st.success(inspected_record.required_action or "No action recorded.")
+                # CISA Mandate Action
+                st.markdown(f"""
+                <div class="hud-card hud-card-accent-red" style="border: 1.5px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.05); margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #EF4444; font-weight: 700;">
+                            // CISA BINDING REQUIRED ACTION [REMEDIATION MANDATE]
+                        </span>
+                        <span class="hud-tag hud-tag-red">[MANDATE: BOD 22-01]</span>
+                    </div>
+                    <div style="color: #FFFFFF; font-weight: 700; font-size: 0.88rem; line-height: 1.5;">
+                        {inspected_record.required_action or 'No action recorded.'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 if inspected_record.notes:
-                    st.markdown("**Technical Notes:**")
-                    st.info(inspected_record.notes)
+                    st.markdown(f"""
+                    <div class="hud-card">
+                        <div style="font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #94A3B8; font-weight: 700; margin-bottom: 6px;">
+                            // TECHNICAL NOTES &amp; ADVISORIES
+                        </div>
+                        <div style="font-size: 0.84rem; line-height: 1.5; color: #CBD5E1;">
+                            {inspected_record.notes}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            with detail_col2:
-                st.markdown("##### Lifecycle & Status")
-                st.write(f"**Vendor / Project:** `{inspected_record.vendor_project}`")
-                st.write(f"**Affected Product:** `{inspected_record.product}`")
-                st.write(f"**Date Added to KEV:** `{inspected_record.date_added}`")
-                st.write(f"**CISA Due Date:** `{inspected_record.due_date}`")
-                st.write(f"**Days Until Due:** `{inspected_record.days_until_due(reference_date)}`")
-                st.write(f"**Current Status:** `{inspected_record.due_status(reference_date)}`")
-                st.write(f"**Ransomware Use:** `{inspected_record.known_ransomware_campaign_use}`")
-                st.write(f"**Weakness (CWEs):** `{', '.join(inspected_record.cwes) if inspected_record.cwes else 'None'}`")
+            with detail_c2:
+                insp_status = inspected_record.due_status(reference_date)
+                if insp_status == "overdue":
+                    tag_class = "hud-tag-red"
+                    tag_label = "[OVERDUE]"
+                elif insp_status == "due_soon":
+                    tag_class = "hud-tag-amber"
+                    tag_label = "[DUE SOON]"
+                elif insp_status == "not_yet_due":
+                    tag_class = "hud-tag-green"
+                    tag_label = "[NOT YET DUE]"
+                else:
+                    tag_class = "hud-tag-cyan"
+                    tag_label = "[NO DUE DATE]"
+
+                rw_label = inspected_record.known_ransomware_campaign_use or "Unknown"
+                rw_class = "hud-tag-red" if rw_label == "Known" else "hud-tag-cyan"
+
+                cwes_str = ', '.join(inspected_record.cwes) if inspected_record.cwes else 'None Cataloged'
+
+                st.markdown(f"""
+                <div class="hud-card">
+                    <div style="font-size: 0.74rem; font-family: 'JetBrains Mono', monospace; color: #38BDF8; font-weight: 700; margin-bottom: 10px;">
+                        // LIFECYCLE &amp; TELEMETRY
+                    </div>
+                    <div style="font-size: 0.82rem; line-height: 1.8; color: #CBD5E1;">
+                        <div><strong>VENDOR:</strong> <span style="color: #FFFFFF;">{inspected_record.vendor_project}</span></div>
+                        <div><strong>PRODUCT:</strong> <span style="color: #FFFFFF;">{inspected_record.product}</span></div>
+                        <div><strong>DATE ADDED:</strong> <span style="color: #FFFFFF;">{inspected_record.date_added}</span></div>
+                        <div><strong>DUE DATE:</strong> <span style="color: #FFFFFF;">{inspected_record.due_date}</span></div>
+                        <div><strong>DAYS REMAINING:</strong> <span style="color: #FFFFFF;">{inspected_record.days_until_due(reference_date)}</span></div>
+                        <div style="margin-top: 4px;"><strong>DEADLINE STATUS:</strong> <span class="hud-tag {tag_class}">{tag_label}</span></div>
+                        <div style="margin-top: 4px;"><strong>RANSOMWARE:</strong> <span class="hud-tag {rw_class}">[{rw_label.upper()}]</span></div>
+                        <div style="margin-top: 4px;"><strong>WEAKNESS (CWE):</strong> <span style="color: #FFFFFF; font-family: 'JetBrains Mono', monospace;">{cwes_str}</span></div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
 
 # -----------------------------------------------------------------------------
 # Tab 4: Data Quality & Audit Report
 # -----------------------------------------------------------------------------
 with tab_quality:
-    st.subheader("Defensive Data-Quality Diagnostics")
-    st.caption("Conducted on the full source catalog prior to filtering, ensuring data defects are never masked.")
+    st.markdown("""
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">
+            // DEFENSIVE DATA-QUALITY &amp; INTEGRITY AUDIT
+        </div>
+        <div style="font-size: 0.8rem; color: #94A3B8; font-family: 'JetBrains Mono', monospace;">
+            Conducted systematically across the complete un-filtered catalog snapshot to ensure data defects are never masked.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    audit_col1, audit_col2, audit_col3, audit_col4 = st.columns(4)
-    with audit_col1:
-        st.metric("Total Quality Issues", data_quality["total_issues"])
-    with audit_col2:
-        st.metric("Affected Source Records", data_quality["affected_record_count"])
-    with audit_col3:
-        st.metric("Duplicate CVE IDs", len(data_quality["duplicate_cve_ids"]))
-    with audit_col4:
-        st.metric("Missing Due Dates", len(data_quality["missing_due_date"]))
+    audit_c1, audit_c2, audit_c3, audit_c4 = st.columns(4)
+
+    with audit_c1:
+        st.markdown(f"""
+        <div class="hud-kpi-card">
+            <div class="hud-kpi-header">
+                <span><span class="hud-slash">//</span>TOTAL ISSUES</span>
+                <span class="hud-tag {'hud-tag-green' if data_quality['total_issues'] == 0 else 'hud-tag-red'}">[{'AUDIT.PASS' if data_quality['total_issues'] == 0 else 'AUDIT.ALERT'}]</span>
+            </div>
+            <div class="hud-kpi-value">{data_quality['total_issues']}</div>
+            <div class="hud-kpi-delta">RECORD DEFECTS</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with audit_c2:
+        st.markdown(f"""
+        <div class="hud-kpi-card">
+            <div class="hud-kpi-header">
+                <span><span class="hud-slash">//</span>AFFECTED ROWS</span>
+                <span class="hud-tag hud-tag-cyan">[SOURCE: RAW]</span>
+            </div>
+            <div class="hud-kpi-value">{data_quality['affected_record_count']}</div>
+            <div class="hud-kpi-delta">OF {len(all_records):,} TOTAL</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with audit_c3:
+        st.markdown(f"""
+        <div class="hud-kpi-card">
+            <div class="hud-kpi-header">
+                <span><span class="hud-slash">//</span>DUPLICATE CVES</span>
+                <span class="hud-tag hud-tag-cyan">[RFC INTEGRITY]</span>
+            </div>
+            <div class="hud-kpi-value">{len(data_quality['duplicate_cve_ids'])}</div>
+            <div class="hud-kpi-delta">COLLISIONS DETECTED</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with audit_c4:
+        st.markdown(f"""
+        <div class="hud-kpi-card">
+            <div class="hud-kpi-header">
+                <span><span class="hud-slash">//</span>MISSING DUE DATES</span>
+                <span class="hud-tag hud-tag-cyan">[MANDATE CHECK]</span>
+            </div>
+            <div class="hud-kpi-value">{len(data_quality['missing_due_date'])}</div>
+            <div class="hud-kpi-delta">RECORDS LACKING DATES</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     if data_quality["total_issues"] == 0:
-        st.success("✅ Zero data-quality defects detected in the active KEV catalog snapshot.")
+        st.markdown("""
+        <div class="hud-card hud-card-accent-green" style="margin-top: 14px;">
+            <div style="font-weight: 800; color: #10B981; font-size: 0.88rem; margin-bottom: 4px;">
+                <span class="hud-tag hud-tag-green">[AUDIT.PASS]</span> ZERO DATA-QUALITY DEFECTS DETECTED
+            </div>
+            <div style="font-size: 0.84rem; color: #CBD5E1; line-height: 1.55;">
+                All catalog records adhere strictly to CISA RFC-compliant date structures, unique identifier integrity, and required schema fields.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.warning("Data quality findings identified:")
+        st.markdown("""
+        <div class="hud-card hud-card-accent-amber" style="margin-top: 14px;">
+            <div style="font-weight: 800; color: #F59E0B; font-size: 0.88rem; margin-bottom: 4px;">
+                <span class="hud-tag hud-tag-amber">[AUDIT.FINDINGS]</span> DATA-QUALITY DEFECTS SURFACED
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         st.json(data_quality)
 
 
 # -----------------------------------------------------------------------------
-# Tab 5: Prioritization Policy & Documentation
+# Tab 5: Prioritization Policy & Playbook
 # -----------------------------------------------------------------------------
 with tab_docs:
-    st.subheader("Auditable Prioritization Policy")
     st.markdown("""
-    ### Why Transparent Ordering?
-    In defensive vulnerability management, inventing arbitrary numeric threat scores or synthetic risk formulas absent from official catalogs can mislead operations teams. This platform implements strict, auditable sorting:
+    <div style="margin-bottom: 10px;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #FFFFFF;">
+            // AUDITABLE PRIORITIZATION POLICY &amp; DEFENSIVE CONTRACT
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    1. **Overdue Records First**: Ranked from most negative deadline offset to least negative (most urgent first).
-    2. **Valid Future Deadlines Next**: Sorted earliest due date first.
-    3. **Records Without Usable Due Dates Last**: Retained safely without discarding.
-    4. **Deterministic Tie-Breaking**: Oldest `date_added` first; completely tied entries preserve input order.
+    st.markdown("""
+    <div class="hud-card">
+        <h4 style="color: #38BDF8; font-size: 1rem; margin-top: 0;"><span class="hud-slash">//</span>1. The Deterministic Priority Queue</h4>
+        <p style="font-size: 0.85rem; line-height: 1.6; color: #CBD5E1;">
+            In defensive vulnerability management, inventing arbitrary numeric threat scores or synthetic risk formulas absent from official catalogs can mislead operations teams. This platform implements strict, auditable sorting:
+        </p>
+        <ol style="font-size: 0.85rem; line-height: 1.7; color: #E2E8F0;">
+            <li><strong>[RULE 1] Overdue Records First:</strong> Ranked from most negative deadline offset to least negative (furthest overdue first).</li>
+            <li><strong>[RULE 2] Valid Upcoming Deadlines Next:</strong> Sorted chronologically, earliest due date first.</li>
+            <li><strong>[RULE 3] Records Without Usable Due Dates Last:</strong> Retained safely in priority order without discarding.</li>
+            <li><strong>[RULE 4] Deterministic Tie-Breaking:</strong> Oldest <code>date_added</code> first; completely tied entries preserve input order.</li>
+        </ol>
+    </div>
 
-    ### Boundary & Interpretation Rules
-    * **Defensive Scope Only**: Performs catalog modeling and prioritization; no target exploitation or network port scanning.
-    * **Vendor Counts $\\neq$ Risk**: Vendor counts describe catalog presence and reporting maturity, not vendor security or organizational exposure.
-    * **Ransomware Unknown**: Indicates unconfirmed campaign use, not confirmed absence of ransomware danger.
-    """)
+    <div class="hud-card" style="margin-top: 14px;">
+        <h4 style="color: #38BDF8; font-size: 1rem; margin-top: 0;"><span class="hud-slash">//</span>2. Defensive Operational Principles</h4>
+        <div style="font-size: 0.85rem; line-height: 1.7; color: #CBD5E1;">
+            <p><strong><span class="hud-tag hud-tag-cyan">[DEFENSIVE SCOPE]</span> No Weaponization:</strong> The platform performs catalog modeling, date arithmetic, and defensive prioritization only. No target exploitation, penetration testing, or network port probing is performed.</p>
+            <p><strong><span class="hud-tag hud-tag-cyan">[COUNTS ≠ RISK]</span> Reporting Maturity:</strong> Vendor counts describe catalog presence and reporting maturity, not vendor software insecurity or an enterprise's specific exposure.</p>
+            <p><strong><span class="hud-tag hud-tag-cyan">[RANSOMWARE UNKNOWN]</span> Absence of Proof:</strong> <code>Unknown</code> indicates unconfirmed campaign use in public telemetry, not confirmed absence of ransomware threat.</p>
+            <p><strong><span class="hud-tag hud-tag-cyan">[BOD 22-01 MANDATE]</span> Federal Compliance:</strong> Mandated compliance deadlines reflect federal operational urgency; overdue items must receive immediate mitigation.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
