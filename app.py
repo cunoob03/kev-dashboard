@@ -5,9 +5,11 @@ Matches Team Canva Deck: "Black Sci Fi Computer Technology Presentation"
 """
 
 import csv
+import html
 import io
 import json
 import tempfile
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
@@ -19,18 +21,13 @@ import requests
 import streamlit as st
 
 from src import config
-from src.constants import PLOT_FILENAMES, WORKLIST_CSV_COLUMNS
-from src.counters import count_by_product, count_by_vendor, count_summary_stats
-from src.export import export_worklist_csv
+from src.constants import WORKLIST_CSV_COLUMNS
+from src.counters import count_by_vendor
 from src.filters import (
     filter_by_date_range, filter_by_due_status, filter_by_product,
     filter_by_ransomware, filter_by_vendor,
 )
-from src.models import VulnerabilityRecord
-from src.parser import find_data_quality_issues, load_catalog, parse_date
-from src.plots import (
-    plot_due_status, plot_monthly_trend, plot_ransomware_by_vendor, plot_top_vendors,
-)
+from src.parser import find_data_quality_issues, load_catalog
 from src.prioritizer import PrioritizedWorklist
 
 # -- Cyber-HUD Telemetry Palette ----------------------------------------------
@@ -96,11 +93,13 @@ st.markdown("""
         clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
         padding: 16px 20px;
         margin-bottom: 1rem;
+        filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.4));
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 0 15px rgba(56, 189, 248, 0.03);
-        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        transition: border-color 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
     }
     .hud-card:hover {
         border-color: rgba(255, 255, 255, 0.6);
+        filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.45));
         box-shadow: 0 0 25px rgba(56, 189, 248, 0.15), inset 0 0 16px rgba(56, 189, 248, 0.06);
     }
     .hud-card-accent-red {
@@ -123,12 +122,14 @@ st.markdown("""
         clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
         padding: 14px 18px;
         position: relative;
+        filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.35));
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
         transition: all 0.2s ease;
         margin-bottom: 8px;
     }
     .hud-kpi-card:hover {
         border-color: rgba(56, 189, 248, 0.7);
+        filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.45));
         box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
     }
     .hud-kpi-header {
@@ -390,6 +391,8 @@ st.session_state.available_vendors = unique_vendors
 # -----------------------------------------------------------------------------
 def apply_triage_preset(preset: str):
     """Callback to apply one-click quick triage presets across the platform."""
+    st.session_state.filter_date_start = None
+    st.session_state.filter_date_end = None
     if preset == "ALL":
         st.session_state.filter_vendors = []
         st.session_state.filter_product = ""
@@ -420,7 +423,11 @@ def detect_active_preset(catalog_vendors: list) -> str:
     p = st.session_state.get("filter_product", "").strip()
     r = st.session_state.get("filter_ransomware", "All")
     d = st.session_state.get("filter_due_status", "All")
+    s = st.session_state.get("filter_date_start")
+    e = st.session_state.get("filter_date_end")
 
+    if s is not None or e is not None:
+        return "CUSTOM"
     if not v and not p and r == "All" and d == "All":
         return "ALL"
     if not v and not p and r == "All" and d == "overdue":
@@ -563,6 +570,21 @@ if "reference_date" not in locals():
 if "due_soon_window" not in locals():
     due_soon_window = st.session_state.get("filter_due_window", config.DUE_SOON_DAYS)
 
+# Resolve date-added boundaries
+if "start_date" in locals():
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+else:
+    s_val = st.session_state.get("filter_date_start")
+    start_date = s_val.date() if isinstance(s_val, datetime) else s_val
+
+if "end_date" in locals():
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
+else:
+    e_val = st.session_state.get("filter_date_end")
+    end_date = e_val.date() if isinstance(e_val, datetime) else e_val
+
 
 # -----------------------------------------------------------------------------
 # Data Filtering & Prioritization Pipeline
@@ -587,7 +609,9 @@ if due_status_filter != "All":
     selected = filter_by_due_status(selected, due_status_filter, reference_date)
     applied_filters.append(f"due_status = '{due_status_filter}'")
 
-if start_date or end_date:
+if start_date and end_date and start_date > end_date:
+    st.sidebar.error("[DATE ERROR] 'From Date' must be on or before 'To Date'. Date filter bypassed.")
+elif start_date or end_date:
     selected = filter_by_date_range(selected, start_date, end_date)
     applied_filters.append(f"date_added between {start_date or 'any'} and {end_date or 'any'}")
 
@@ -925,10 +949,10 @@ with tab_worklist:
         if search_kw.strip():
             kw = search_kw.strip().lower()
             df_worklist = df_worklist[
-                df_worklist["CVE ID"].str.lower().str.contains(kw) |
-                df_worklist["Vendor / Project"].str.lower().str.contains(kw) |
-                df_worklist["Product"].str.lower().str.contains(kw) |
-                df_worklist["Short Description"].str.lower().str.contains(kw)
+                df_worklist["CVE ID"].fillna("").astype(str).str.lower().str.contains(kw, regex=False) |
+                df_worklist["Vendor / Project"].fillna("").astype(str).str.lower().str.contains(kw, regex=False) |
+                df_worklist["Product"].fillna("").astype(str).str.lower().str.contains(kw, regex=False) |
+                df_worklist["Short Description"].fillna("").astype(str).str.lower().str.contains(kw, regex=False)
             ]
 
         # Interactive Dataframe
@@ -1055,6 +1079,11 @@ with tab_charts:
             ax2.bar_label(bars2, padding=4, color="#FFFFFF", fontweight="bold", fontsize=9)
             ax2.invert_yaxis()
             ax2.set_xlabel("Vulnerabilities", color="#CBD5E1")
+        else:
+            ax2.text(0.5, 0.5, "// NO MATCHING RECORDS", transform=ax2.transAxes,
+                     ha="center", va="center", color="#94A3B8", fontweight="bold", fontfamily="monospace")
+            ax2.set_xticks([])
+            ax2.set_yticks([])
         fig2.tight_layout()
         st.pyplot(fig2)
         plt.close(fig2)
@@ -1067,25 +1096,46 @@ with tab_charts:
         apply_cyber_hud_chart_style(fig3, ax3, "KEV ADDITIONS BY MONTH [TELEMETRY]")
         dated_records = [r for r in selected if r.date_added]
         if dated_records:
-            monthly_counts = {}
-            for r in dated_records:
-                month_key = r.date_added.strftime("%Y-%m")
-                monthly_counts[month_key] = monthly_counts.get(month_key, 0) + 1
-            sorted_months = sorted(monthly_counts.keys())
+            monthly_counts = Counter(
+                (r.date_added.year, r.date_added.month) for r in dated_records
+            )
+            start_ym, end_ym = min(monthly_counts), max(monthly_counts)
+            current = date(*start_ym, 1)
+            months = []
+            while (current.year, current.month) <= end_ym:
+                months.append((current.year, current.month))
+                if (current.year, current.month) == end_ym:
+                    break
+                current = date(current.year + current.month // 12, current.month % 12 + 1, 1)
+
+            positions = list(range(len(months)))
+            counts_series = [monthly_counts.get(m, 0) for m in months]
+            month_labels = [f"{m[0]}-{m[1]:02d}" for m in months]
+
             ax3.plot(
-                sorted_months,
-                [monthly_counts[m] for m in sorted_months],
-                marker="o", color=COLOR_HUD_CYAN, linewidth=2.2,
-                markerfacecolor="#FFFFFF", markeredgecolor=COLOR_HUD_CYAN, markersize=5,
+                positions,
+                counts_series,
+                marker="o", color=COLOR_HUD_CYAN, linewidth=2.0,
+                markerfacecolor="#FFFFFF", markeredgecolor=COLOR_HUD_CYAN, markersize=4,
             )
             ax3.fill_between(
-                sorted_months,
-                [monthly_counts[m] for m in sorted_months],
+                positions,
+                counts_series,
                 alpha=0.18, color=COLOR_HUD_CYAN,
             )
-            ax3.set_xticks(range(0, len(sorted_months), max(1, len(sorted_months) // 6)))
-            ax3.tick_params(axis="x", rotation=35, colors="#FFFFFF")
+            step = max(1, (len(months) + 5) // 6)
+            ticks = list(range(0, len(months), step))
+            if ticks[-1] != len(months) - 1:
+                ticks.append(len(months) - 1)
+            ax3.set_xticks(ticks)
+            ax3.set_xticklabels([month_labels[i] for i in ticks], rotation=35, ha="right")
+            ax3.tick_params(axis="x", colors="#FFFFFF")
             ax3.set_ylabel("Additions", color="#CBD5E1")
+        else:
+            ax3.text(0.5, 0.5, "// NO MATCHING RECORDS WITH DATE_ADDED", transform=ax3.transAxes,
+                     ha="center", va="center", color="#94A3B8", fontweight="bold", fontfamily="monospace")
+            ax3.set_xticks([])
+            ax3.set_yticks([])
         fig3.tight_layout()
         st.pyplot(fig3)
         plt.close(fig3)
@@ -1094,8 +1144,8 @@ with tab_charts:
         st.markdown("**4. KNOWN VS UNKNOWN RANSOMWARE USE**")
         fig4, ax4 = plt.subplots(figsize=(8, 4.6), dpi=150)
         apply_cyber_hud_chart_style(fig4, ax4, "RANSOMWARE CAMPAIGN ASSOCIATIONS")
-        rw_known = sum(1 for r in selected if r.known_ransomware_campaign_use == "Known")
-        rw_unknown = sum(1 for r in selected if r.known_ransomware_campaign_use == "Unknown")
+        rw_known = sum(1 for r in selected if (r.known_ransomware_campaign_use or "").casefold() == "known")
+        rw_unknown = sum(1 for r in selected if (r.known_ransomware_campaign_use or "").casefold() == "unknown")
         rw_bars = ax4.bar(
             ["KNOWN CAMPAIGN USE", "UNKNOWN / UNCONFIRMED"],
             [rw_known, rw_unknown],
@@ -1131,19 +1181,30 @@ with tab_inspector:
         </div>
         """, unsafe_allow_html=True)
     else:
-        cve_options = [f"{r.cve_id} // {r.vendor_project or 'Unknown'} ({r.product or 'Unknown'})" for r in prioritized_records[:100]]
-        selected_cve_label = st.selectbox(
+        cve_options = [
+            f"#{rank:03d} // {r.cve_id or '(NO CVE)'} // {r.vendor_project or 'Unknown'} ({r.product or 'Unknown'})"
+            for rank, r in enumerate(prioritized_records[:100], start=1)
+        ]
+        selected_idx = st.selectbox(
             "// SELECT VULNERABILITY TO INSPECT (SHOWING TOP 100 IN PRIORITY ORDER):",
-            options=cve_options
+            options=list(range(len(cve_options))),
+            format_func=lambda i: cve_options[i]
         )
 
-        selected_cve_id = selected_cve_label.split(" // ")[0]
-        inspected_record = next((r for r in prioritized_records if r.cve_id == selected_cve_id), None)
+        inspected_record = prioritized_records[selected_idx]
 
         if inspected_record:
+            safe_cve = html.escape(str(inspected_record.cve_id or "NO CVE"))
+            safe_title = html.escape(str(inspected_record.vulnerability_name or "NO FORMAL TITLE"))
+            safe_desc = html.escape(str(inspected_record.short_description or "No description provided."))
+            safe_action = html.escape(str(inspected_record.required_action or "No action recorded."))
+            safe_notes = html.escape(str(inspected_record.notes or ""))
+            safe_vendor = html.escape(str(inspected_record.vendor_project or "(missing)"))
+            safe_product = html.escape(str(inspected_record.product or "(missing)"))
+
             st.markdown(f"""
             <div style="font-size: 1.3rem; font-weight: 800; color: #FFFFFF; margin-top: 6px; margin-bottom: 12px;">
-                <span class="hud-slash">//</span>{inspected_record.cve_id} : {inspected_record.vulnerability_name or 'NO FORMAL TITLE'}
+                <span class="hud-slash">//</span>{safe_cve} : {safe_title}
             </div>
             """, unsafe_allow_html=True)
 
@@ -1157,7 +1218,7 @@ with tab_inspector:
                         // VULNERABILITY SUMMARY &amp; ATTACK VECTOR
                     </div>
                     <div style="font-size: 0.86rem; line-height: 1.6; color: #E2E8F0;">
-                        {inspected_record.short_description or 'No description provided.'}
+                        {safe_desc}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1172,19 +1233,19 @@ with tab_inspector:
                         <span class="hud-tag hud-tag-red">[MANDATE: BOD 22-01]</span>
                     </div>
                     <div style="color: #FFFFFF; font-weight: 700; font-size: 0.88rem; line-height: 1.5;">
-                        {inspected_record.required_action or 'No action recorded.'}
+                        {safe_action}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                if inspected_record.notes:
+                if safe_notes:
                     st.markdown(f"""
                     <div class="hud-card">
                         <div style="font-size: 0.72rem; font-family: 'JetBrains Mono', monospace; color: #94A3B8; font-weight: 700; margin-bottom: 6px;">
                             // TECHNICAL NOTES &amp; ADVISORIES
                         </div>
                         <div style="font-size: 0.84rem; line-height: 1.5; color: #CBD5E1;">
-                            {inspected_record.notes}
+                            {safe_notes}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -1205,9 +1266,9 @@ with tab_inspector:
                     tag_label = "[NO DUE DATE]"
 
                 rw_label = inspected_record.known_ransomware_campaign_use or "Unknown"
-                rw_class = "hud-tag-red" if rw_label == "Known" else "hud-tag-cyan"
+                rw_class = "hud-tag-red" if rw_label.casefold() == "known" else "hud-tag-cyan"
 
-                cwes_str = ', '.join(inspected_record.cwes) if inspected_record.cwes else 'None Cataloged'
+                cwes_str = html.escape(', '.join(inspected_record.cwes)) if inspected_record.cwes else 'None Cataloged'
 
                 st.markdown(f"""
                 <div class="hud-card">
@@ -1215,13 +1276,13 @@ with tab_inspector:
                         // LIFECYCLE &amp; TELEMETRY
                     </div>
                     <div style="font-size: 0.82rem; line-height: 1.8; color: #CBD5E1;">
-                        <div><strong>VENDOR:</strong> <span style="color: #FFFFFF;">{inspected_record.vendor_project}</span></div>
-                        <div><strong>PRODUCT:</strong> <span style="color: #FFFFFF;">{inspected_record.product}</span></div>
+                        <div><strong>VENDOR:</strong> <span style="color: #FFFFFF;">{safe_vendor}</span></div>
+                        <div><strong>PRODUCT:</strong> <span style="color: #FFFFFF;">{safe_product}</span></div>
                         <div><strong>DATE ADDED:</strong> <span style="color: #FFFFFF;">{inspected_record.date_added}</span></div>
                         <div><strong>DUE DATE:</strong> <span style="color: #FFFFFF;">{inspected_record.due_date}</span></div>
                         <div><strong>DAYS REMAINING:</strong> <span style="color: #FFFFFF;">{inspected_record.days_until_due(reference_date)}</span></div>
                         <div style="margin-top: 4px;"><strong>DEADLINE STATUS:</strong> <span class="hud-tag {tag_class}">{tag_label}</span></div>
-                        <div style="margin-top: 4px;"><strong>RANSOMWARE:</strong> <span class="hud-tag {rw_class}">[{rw_label.upper()}]</span></div>
+                        <div style="margin-top: 4px;"><strong>RANSOMWARE:</strong> <span class="hud-tag {rw_class}">[{html.escape(rw_label.upper())}]</span></div>
                         <div style="margin-top: 4px;"><strong>WEAKNESS (CWE):</strong> <span style="color: #FFFFFF; font-family: 'JetBrains Mono', monospace;">{cwes_str}</span></div>
                     </div>
                 </div>
